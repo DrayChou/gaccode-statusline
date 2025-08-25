@@ -37,7 +37,14 @@ DEFAULT_CONFIG = {
     "show_balance": True,
     "show_subscription": True,
     "directory_full_path": True,
-    "layout": "single_line"  # single_line 或 multi_line
+    "layout": "single_line",  # single_line 或 multi_line
+    "multiplier_config": {
+        "enabled": True,
+        "start_time": "16:30",
+        "end_time": "18:30",
+        "multiplier": 5,
+        "display_text": "5X"
+    }
 }
 
 def load_config():
@@ -112,6 +119,50 @@ def get_git_info(directory):
 def get_current_time():
     """获取当前时间"""
     return datetime.now().strftime("%H:%M:%S")
+
+def is_peak_hour(config):
+    """检查是否在积分消耗倍数时段内"""
+    multiplier_config = config.get('multiplier_config', {})
+    
+    # 如果功能未启用，返回False
+    if not multiplier_config.get('enabled', True):
+        return False
+    
+    now = datetime.now()
+    current_time = now.time()
+    
+    try:
+        # 从配置中获取时间段
+        start_time_str = multiplier_config.get('start_time', '16:30')
+        end_time_str = multiplier_config.get('end_time', '18:30')
+        
+        start_time = datetime.strptime(start_time_str, "%H:%M").time()
+        end_time = datetime.strptime(end_time_str, "%H:%M").time()
+        
+        return start_time <= current_time <= end_time
+    except Exception:
+        # 如果解析时间失败，返回False
+        return False
+
+def get_multiplier_info(config):
+    """获取积分消耗倍数信息"""
+    if is_peak_hour(config):
+        multiplier_config = config.get('multiplier_config', {})
+        multiplier = multiplier_config.get('multiplier', 5)
+        display_text = multiplier_config.get('display_text', f'{multiplier}X')
+        
+        return {
+            'active': True,
+            'multiplier': multiplier,
+            'color': '\033[91m',  # 红色
+            'display': display_text
+        }
+    return {
+        'active': False,
+        'multiplier': 1,
+        'color': '',
+        'display': ''
+    }
 
 def calculate_session_duration(session_info):
     """计算会话时长"""
@@ -335,7 +386,19 @@ def display_status():
                     balance = balance_data['balance']
                     credit_cap = balance_data['creditCap']
                     balance_color = get_color_code(balance, [500, 1000])
-                    status_parts.append(f"Balance:{balance_color}{balance}{reset}/{credit_cap}")
+                    
+                    # 获取倍数信息
+                    multiplier_info = get_multiplier_info(config)
+                    
+                    # 构建balance显示字符串
+                    balance_str = f"Balance:{balance_color}{balance}{reset}/{credit_cap}"
+                    
+                    # 如果在倍数时段内，添加倍数标记
+                    if multiplier_info['active']:
+                        multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{reset}"
+                        balance_str += f" {multiplier_mark}"
+                    
+                    status_parts.append(balance_str)
                 except Exception:
                     pass
         

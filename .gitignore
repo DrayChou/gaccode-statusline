@@ -1,6 +1,7 @@
 # 敏感文件和个人数据
 api-token.txt
 statusline-cache.json
+statusline-config.json
 
 # 调试和测试文件
 debug-*.py
@@ -55,3 +56,6 @@ logs/
 *.bak
 *.backup
 *.old
+
+# 
+.lh/

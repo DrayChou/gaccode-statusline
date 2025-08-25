@@ -40,10 +40,26 @@ DEFAULT_CONFIG = {
     "layout": "single_line",  # single_line 或 multi_line
     "multiplier_config": {
         "enabled": True,
-        "start_time": "16:30",
-        "end_time": "18:30",
-        "multiplier": 5,
-        "display_text": "5X"
+        "periods": [
+            {
+                "name": "peak_hour",
+                "start_time": "16:30",
+                "end_time": "18:30",
+                "multiplier": 5,
+                "display_text": "5X",
+                "weekdays_only": True,  # 仅工作日
+                "color": "red"  # 红色显示
+            },
+            {
+                "name": "off_peak",
+                "start_time": "01:00",
+                "end_time": "10:00",
+                "multiplier": 0.8,
+                "display_text": "0.8X",
+                "weekdays_only": False,  # 所有日期
+                "color": "green"  # 绿色显示
+            }
+        ]
     }
 }
 
@@ -120,48 +136,82 @@ def get_current_time():
     """获取当前时间"""
     return datetime.now().strftime("%H:%M:%S")
 
-def is_peak_hour(config):
-    """检查是否在积分消耗倍数时段内"""
+def get_current_period(config):
+    """检查当前时间是否在任何特殊倍率时段内"""
     multiplier_config = config.get('multiplier_config', {})
     
-    # 如果功能未启用，返回False
+    # 如果功能未启用，返回None
     if not multiplier_config.get('enabled', True):
-        return False
+        return None
     
     now = datetime.now()
     current_time = now.time()
+    current_weekday = now.weekday()  # 0=周一, 6=周日
+    is_weekday = current_weekday < 5  # 周一到周五为工作日
     
-    try:
-        # 从配置中获取时间段
-        start_time_str = multiplier_config.get('start_time', '16:30')
-        end_time_str = multiplier_config.get('end_time', '18:30')
-        
-        start_time = datetime.strptime(start_time_str, "%H:%M").time()
-        end_time = datetime.strptime(end_time_str, "%H:%M").time()
-        
-        return start_time <= current_time <= end_time
-    except Exception:
-        # 如果解析时间失败，返回False
-        return False
+    periods = multiplier_config.get('periods', [])
+    
+    # 遍历所有时段配置
+    for period in periods:
+        try:
+            # 检查工作日限制
+            if period.get('weekdays_only', False) and not is_weekday:
+                continue
+            
+            # 从配置中获取时间段
+            start_time_str = period.get('start_time', '00:00')
+            end_time_str = period.get('end_time', '23:59')
+            
+            start_time = datetime.strptime(start_time_str, "%H:%M").time()
+            end_time = datetime.strptime(end_time_str, "%H:%M").time()
+            
+            # 检查是否在时间段内
+            if start_time <= current_time <= end_time:
+                return period
+        except Exception:
+            # 如果解析时间失败，跳过这个时段
+            continue
+    
+    return None
+
+def get_color_by_name(color_name):
+    """根据颜色名称获取ANSI颜色代码"""
+    color_map = {
+        'red': '\033[91m',      # 红色
+        'green': '\033[92m',    # 绿色
+        'yellow': '\033[93m',   # 黄色
+        'blue': '\033[94m',     # 蓝色
+        'magenta': '\033[95m',  # 洋红色
+        'cyan': '\033[96m',     # 青色
+        'white': '\033[97m',    # 白色
+        'grey': '\033[90m',     # 灰色
+    }
+    return color_map.get(color_name, '\033[91m')  # 默认红色
 
 def get_multiplier_info(config):
     """获取积分消耗倍数信息"""
-    if is_peak_hour(config):
-        multiplier_config = config.get('multiplier_config', {})
-        multiplier = multiplier_config.get('multiplier', 5)
-        display_text = multiplier_config.get('display_text', f'{multiplier}X')
+    current_period = get_current_period(config)
+    
+    if current_period:
+        multiplier = current_period.get('multiplier', 1)
+        display_text = current_period.get('display_text', f'{multiplier}X')
+        color_name = current_period.get('color', 'red')
+        color_code = get_color_by_name(color_name)
         
         return {
             'active': True,
             'multiplier': multiplier,
-            'color': '\033[91m',  # 红色
-            'display': display_text
+            'color': color_code,
+            'display': display_text,
+            'period_name': current_period.get('name', 'unknown')
         }
+    
     return {
         'active': False,
         'multiplier': 1,
         'color': '',
-        'display': ''
+        'display': '',
+        'period_name': 'normal'
     }
 
 def calculate_session_duration(session_info):

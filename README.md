@@ -11,6 +11,7 @@ A comprehensive and configurable statusline for Claude Code that displays GAC AP
 - 🔄 **Real-time Updates**: Displays current balance and subscription status
 - 🎨 **Color-coded Status**: Visual indicators for balance and expiry warnings
 - ⚡ **Multi-tier Caching**: 1-second UI refresh, 1-minute balance cache, 1-hour subscription cache
+- 🕒 **Smart Time-based Multipliers**: Visual indicators for peak/off-peak periods with configurable multipliers
 - 🔒 **Secure Token Management**: Local token storage with management tools
 - 🖥️ **Cross-platform**: Works on Windows, macOS, and Linux
 - 🎯 **Claude Code Integration**: Seamless integration with Claude Code statusline
@@ -23,6 +24,16 @@ A comprehensive and configurable statusline for Claude Code that displays GAC AP
 **Full Display (Single Line):**
 ```
 Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Balance:2692/12000 Expires:09-13(19d) Dir:myproject Git:main*
+```
+
+**Peak Hour Display with Multiplier:**
+```
+Model:Claude-3.5-Sonnet Time:17:00:23 Cost:$3.75 Balance:2692/12000 [5X] Expires:09-13(19d) Dir:myproject Git:main
+```
+
+**Off-peak Display with Discounted Rate:**
+```
+Model:Claude-3.5-Sonnet Time:08:30:15 Cost:$3.75 Balance:2692/12000 [0.8X] Expires:09-13(19d) Dir:myproject Git:main
 ```
 
 **Multi-line Layout:**
@@ -149,6 +160,7 @@ The statusline is fully customizable through the configuration system:
 | `show_session_duration` | Display session duration | `false` |
 | `directory_full_path` | Show full path vs directory name | `true` |
 | `layout` | `single_line` or `multi_line` | `single_line` |
+| `multiplier_config.enabled` | Enable time-based multiplier display | `true` |
 
 ## 🎨 Display Information
 
@@ -168,9 +180,81 @@ The statusline can display the following information:
 - **Git**: Current Git branch with dirty indicator (*) if uncommitted changes
 
 ### Color Coding
-- 🟢 **Green**: Sufficient balance (>1000) / Time remaining (>14 days)
+- 🟢 **Green**: Sufficient balance (>1000) / Time remaining (>14 days) / Off-peak periods
 - 🟡 **Yellow**: Warning level (500-1000) / (7-14 days)
-- 🔴 **Red**: Critical level (<500) / (<7 days)
+- 🔴 **Red**: Critical level (<500) / (<7 days) / Peak periods
+
+## 🕒 Time-based Multipliers
+
+The statusline automatically detects and displays different cost periods with visual indicators:
+
+### Default Time Periods
+
+| Period | Time Range | Days | Multiplier | Display | Color |
+|--------|------------|------|------------|---------|-------|
+| **Peak Hours** | 4:30-6:30 PM | Weekdays only | 5x | `[5X]` | 🔴 Red |
+| **Off-peak** | 1:00-10:00 AM | All days | 0.8x | `[0.8X]` | 🟢 Green |
+| **Normal** | Other times | All days | 1x | No indicator | Default |
+
+### Configurable Multiplier System
+
+The multiplier system is fully configurable through `statusline-config.json`:
+
+```json
+{
+  "multiplier_config": {
+    "enabled": true,
+    "periods": [
+      {
+        "name": "peak_hour",
+        "start_time": "16:30",
+        "end_time": "18:30",
+        "multiplier": 5,
+        "display_text": "5X",
+        "weekdays_only": true,
+        "color": "red"
+      },
+      {
+        "name": "off_peak",
+        "start_time": "01:00",
+        "end_time": "10:00",
+        "multiplier": 0.8,
+        "display_text": "0.8X",
+        "weekdays_only": false,
+        "color": "green"
+      }
+    ]
+  }
+}
+```
+
+### Multiplier Configuration Options
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `name` | Internal identifier for the period | `"peak_hour"` |
+| `start_time` | Period start time (24-hour format) | `"16:30"` |
+| `end_time` | Period end time (24-hour format) | `"18:30"` |
+| `multiplier` | Cost multiplier for this period | `5` or `0.8` |
+| `display_text` | Text shown in statusline | `"5X"` or `"0.8X"` |
+| `weekdays_only` | Apply only to weekdays (Mon-Fri) | `true` or `false` |
+| `color` | Display color (`red`, `green`, `yellow`, etc.) | `"red"` |
+
+### Adding Custom Periods
+
+You can add additional time periods by extending the `periods` array:
+
+```json
+{
+  "name": "weekend_special",
+  "start_time": "20:00",
+  "end_time": "23:00",
+  "multiplier": 1.5,
+  "display_text": "1.5X",
+  "weekdays_only": false,
+  "color": "yellow"
+}
+```
 
 ## 🔧 Advanced Configuration
 

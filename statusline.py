@@ -11,7 +11,7 @@ import os
 import requests
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # 设置控制台编码
@@ -277,9 +277,9 @@ def format_session_cost(session_info):
             total_cost = cost_info.get("total_cost_usd", 0)
             return f"${total_cost:.2f}"
 
-        # 如果没有具体的成本信息，使用虚假货币单位
-        return "T2.45"  # 虚假货币单位
-    except:
+        # 如果没有具体的成本信息，不显示
+        return None
+    except Exception:
         return None
 
 
@@ -350,7 +350,7 @@ def fetch_balance_data(token):
         )
         balance_resp.raise_for_status()
         return balance_resp.json()
-    except Exception:
+    except requests.RequestException:
         return None
 
 
@@ -364,7 +364,7 @@ def fetch_subscription_data(token):
         )
         subscription_resp.raise_for_status()
         return subscription_resp.json()
-    except Exception:
+    except requests.RequestException:
         return None
 
 
@@ -386,6 +386,49 @@ def calculate_days_left(end_date_str):
         return max(0, days_left)
     except:
         return 0
+
+
+def calculate_next_refill_time(last_refill_str, refill_rate):
+    """计算下一次刷新时间"""
+    try:
+        # 解析带时区的时间戳
+        if last_refill_str.endswith('Z'):
+            # UTC时间
+            last_refill = datetime.fromisoformat(last_refill_str.replace('Z', '+00:00'))
+        else:
+            # 已有时区信息
+            last_refill = datetime.fromisoformat(last_refill_str)
+        
+        # 获取当前UTC时间
+        now = datetime.now(timezone.utc)
+        
+        # 计算下一次刷新时间：上次刷新时间 + 1小时
+        next_refill_time = last_refill + timedelta(hours=1)
+        
+        # 计算剩余时间
+        remaining_seconds = (next_refill_time - now).total_seconds()
+        
+        # 如果已经过了刷新时间，说明还没有开始新的周期
+        if remaining_seconds < 0:
+            return "等待刷新"
+        
+        # 转换为时分秒
+        remaining_hours = int(remaining_seconds // 3600)
+        remaining_minutes = int((remaining_seconds % 3600) // 60)
+        remaining_seconds = int(remaining_seconds % 60)
+        
+        # 如果剩余时间不足1分钟，显示秒数
+        if remaining_hours == 0 and remaining_minutes == 0:
+            return f"{remaining_seconds}s"
+        # 如果剩余时间不足1小时，显示分钟和秒数
+        elif remaining_hours == 0:
+            return f"{remaining_minutes}m{remaining_seconds}s"
+        # 否则显示小时和分钟
+        else:
+            return f"{remaining_hours}h{remaining_minutes}m"
+    except Exception as e:
+        # 调试信息
+        return "未知"
 
 
 def get_color_code(value, thresholds):
@@ -483,6 +526,11 @@ def display_status():
                     balance = balance_data["balance"]
                     credit_cap = balance_data["creditCap"]
                     balance_color = get_color_code(balance, [500, 1000])
+                    
+                    # 获取下一次刷新时间
+                    last_refill = balance_data.get("lastRefill")
+                    refill_rate = balance_data.get("refillRate", 0)
+                    next_refill_time = calculate_next_refill_time(last_refill, refill_rate) if last_refill else "未知"
 
                     # 获取倍数信息
                     multiplier_info = get_multiplier_info(config)
@@ -491,6 +539,10 @@ def display_status():
                     balance_str = (
                         f"Balance:{balance_color}{balance}{reset}/{credit_cap}"
                     )
+                    
+                    # 添加下一次刷新时间
+                    if next_refill_time != "未知":
+                        balance_str += f" ({next_refill_time})"
 
                     # 如果在倍数时段内，添加倍数标记
                     if multiplier_info["active"]:

@@ -18,25 +18,31 @@ A comprehensive and configurable statusline for Claude Code that displays GAC AP
 - ⚙️ **Fully Configurable**: Customizable display components and layout
 - 📊 **Rich Context**: Shows model, time, session cost, directory, Git branch
 - 🌐 **Smart Layout**: Single-line or multi-line display options
+- 🎭 **Model Detection**: Only displays GAC API data for Claude models
+- 💾 **Session Caching**: Caches session information for improved performance
 
 ## 📸 Screenshots
 
 **Full Display (Single Line):**
+
 ```
 Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Balance:2692/12000 Expires:09-13(19d) Dir:myproject Git:main*
 ```
 
 **Peak Hour Display with Multiplier:**
+
 ```
 Model:Claude-3.5-Sonnet Time:17:00:23 Cost:$3.75 Balance:2692/12000 [5X] Expires:09-13(19d) Dir:myproject Git:main
 ```
 
 **Off-peak Display with Discounted Rate:**
+
 ```
 Model:Claude-3.5-Sonnet Time:08:30:15 Cost:$3.75 Balance:2692/12000 [0.8X] Expires:09-13(19d) Dir:myproject Git:main
 ```
 
 **Multi-line Layout:**
+
 ```
 Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Balance:2692/12000 Expires:09-13(19d)
 Dir:/full/path/to/myproject Git:main*
@@ -50,11 +56,12 @@ Dir:/full/path/to/myproject Git:main*
 | 🔴 Critical | `Balance:`<span style="color:red">**350**</span>`/12000` | `Expires:`<span style="color:red">**09-15(3d)**</span> |
 
 **Development Context Examples:**
+
 ```
 # Clean repository
 Dir:myproject Git:main
 
-# Uncommitted changes  
+# Uncommitted changes
 Dir:myproject Git:main*
 
 # Feature branch with changes
@@ -65,10 +72,12 @@ Dir:/Users/developer/projects/myproject Git:main
 ```
 
 **Session Cost Indicators:**
+
 - `Cost:$3.75` - Real session cost with GAC API data
 - `Cost:T2.45` - Mock cost when session data unavailable
 
 **Minimal Configuration:**
+
 ```
 Model:Claude-3.5-Sonnet Time:13:24:15 Balance:2692/12000
 ```
@@ -84,17 +93,20 @@ Model:Claude-3.5-Sonnet Time:13:24:15 Balance:2692/12000
 ### Installation
 
 1. Clone this repository:
+
 ```bash
 git clone https://github.com/DrayChou/gaccode-statusline.git
 cd gaccode-statusline
 ```
 
 2. Set your API token:
+
 ```bash
 python set-gac-token.py set "your-gac-api-token"
 ```
 
 3. Configure Claude Code by adding to your `.claude/settings.json`:
+
 ```json
 {
   "statusLine": {
@@ -107,6 +119,7 @@ python set-gac-token.py set "your-gac-api-token"
 ```
 
 4. (Optional) Customize your display:
+
 ```bash
 python config-statusline.py --interactive
 ```
@@ -116,6 +129,7 @@ python config-statusline.py --interactive
 ## 📋 Commands
 
 ### Token Management
+
 ```bash
 # Set a new token
 python set-gac-token.py set "your-token-here"
@@ -128,6 +142,7 @@ python set-gac-token.py remove
 ```
 
 ### Configuration Management
+
 ```bash
 # Show current configuration
 python config-statusline.py --show
@@ -148,38 +163,42 @@ python config-statusline.py --reset
 
 The statusline is fully customizable through the configuration system:
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `show_model` | Display AI model name | `true` |
-| `show_time` | Display current time | `true` |
-| `show_session_cost` | Display session cost | `true` |
-| `show_directory` | Display current directory | `true` |
-| `show_git_branch` | Display Git branch status | `true` |
-| `show_balance` | Display account balance | `true` |
-| `show_subscription` | Display subscription info | `true` |
-| `show_session_duration` | Display session duration | `false` |
-| `directory_full_path` | Show full path vs directory name | `true` |
-| `layout` | `single_line` or `multi_line` | `single_line` |
-| `multiplier_config.enabled` | Enable time-based multiplier display | `true` |
+| Option                      | Description                          | Default       |
+| --------------------------- | ------------------------------------ | ------------- |
+| `show_model`                | Display AI model name                | `true`        |
+| `show_time`                 | Display current time                 | `true`        |
+| `show_session_cost`         | Display session cost                 | `true`        |
+| `show_directory`            | Display current directory            | `true`        |
+| `show_git_branch`           | Display Git branch status            | `true`        |
+| `show_balance`              | Display account balance              | `true`        |
+| `show_subscription`         | Display subscription info            | `true`        |
+| `show_session_duration`     | Display session duration             | `false`       |
+| `directory_full_path`       | Show full path vs directory name     | `true`        |
+| `layout`                    | `single_line` or `multi_line`        | `single_line` |
+| `multiplier_config.enabled` | Enable time-based multiplier display | `true`        |
 
 ## 🎨 Display Information
 
 The statusline can display the following information:
 
 **Core Information:**
+
 - **Model**: AI model name (e.g., Claude-3.5-Sonnet)
 - **Time**: Current time in HH:MM:SS format
 - **Cost**: Session cost (real: $3.75, mock: T2.45)
 
 **GAC API Data:**
+
 - **Balance**: Current credits / Credit cap (e.g., 2692/12000)
 - **Expires**: Subscription end date with days remaining (e.g., 09-13(19d))
 
 **Development Context:**
+
 - **Dir**: Current directory (full path or name only)
-- **Git**: Current Git branch with dirty indicator (*) if uncommitted changes
+- **Git**: Current Git branch with dirty indicator (\*) if uncommitted changes
 
 ### Color Coding
+
 - 🟢 **Green**: Sufficient balance (>1000) / Time remaining (>14 days) / Off-peak periods
 - 🟡 **Yellow**: Warning level (500-1000) / (7-14 days)
 - 🔴 **Red**: Critical level (<500) / (<7 days) / Peak periods
@@ -190,11 +209,11 @@ The statusline automatically detects and displays different cost periods with vi
 
 ### Default Time Periods
 
-| Period | Time Range | Days | Multiplier | Display | Color |
-|--------|------------|------|------------|---------|-------|
-| **Peak Hours** | 4:30-6:30 PM | Weekdays only | 5x | `[5X]` | 🔴 Red |
-| **Off-peak** | 1:00-10:00 AM | All days | 0.8x | `[0.8X]` | 🟢 Green |
-| **Normal** | Other times | All days | 1x | No indicator | Default |
+| Period         | Time Range    | Days          | Multiplier | Display      | Color    |
+| -------------- | ------------- | ------------- | ---------- | ------------ | -------- |
+| **Peak Hours** | 4:30-6:30 PM  | Weekdays only | 5x         | `[5X]`       | 🔴 Red   |
+| **Off-peak**   | 1:00-10:00 AM | All days      | 0.8x       | `[0.8X]`     | 🟢 Green |
+| **Normal**     | Other times   | All days      | 1x         | No indicator | Default  |
 
 ### Configurable Multiplier System
 
@@ -230,15 +249,15 @@ The multiplier system is fully configurable through `statusline-config.json`:
 
 ### Multiplier Configuration Options
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| `name` | Internal identifier for the period | `"peak_hour"` |
-| `start_time` | Period start time (24-hour format) | `"16:30"` |
-| `end_time` | Period end time (24-hour format) | `"18:30"` |
-| `multiplier` | Cost multiplier for this period | `5` or `0.8` |
-| `display_text` | Text shown in statusline | `"5X"` or `"0.8X"` |
-| `weekdays_only` | Apply only to weekdays (Mon-Fri) | `true` or `false` |
-| `color` | Display color (`red`, `green`, `yellow`, etc.) | `"red"` |
+| Field           | Description                                    | Example            |
+| --------------- | ---------------------------------------------- | ------------------ |
+| `name`          | Internal identifier for the period             | `"peak_hour"`      |
+| `start_time`    | Period start time (24-hour format)             | `"16:30"`          |
+| `end_time`      | Period end time (24-hour format)               | `"18:30"`          |
+| `multiplier`    | Cost multiplier for this period                | `5` or `0.8`       |
+| `display_text`  | Text shown in statusline                       | `"5X"` or `"0.8X"` |
+| `weekdays_only` | Apply only to weekdays (Mon-Fri)               | `true` or `false`  |
+| `color`         | Display color (`red`, `green`, `yellow`, etc.) | `"red"`            |
 
 ### Adding Custom Periods
 
@@ -259,12 +278,15 @@ You can add additional time periods by extending the `periods` array:
 ## 🔧 Advanced Configuration
 
 ### Multi-tier Caching System
+
 The statusline uses intelligent caching:
+
 - **UI Refresh**: 1 second (real-time updates)
 - **Balance Cache**: 1 minute (API rate limiting)
 - **Subscription Cache**: 1 hour (infrequent changes)
 
 Modify in `statusline.py`:
+
 ```python
 BALANCE_CACHE_TIMEOUT = 60      # Balance cache in seconds
 SUBSCRIPTION_CACHE_TIMEOUT = 3600  # Subscription cache in seconds
@@ -273,6 +295,7 @@ SUBSCRIPTION_CACHE_TIMEOUT = 3600  # Subscription cache in seconds
 ## 🛠️ Development
 
 ### File Structure
+
 ```
 gaccode-statusline/
 ├── statusline.py           # Main statusline script
@@ -285,6 +308,7 @@ gaccode-statusline/
 ```
 
 ### Testing
+
 ```bash
 # Test the statusline directly
 echo '{}' | python statusline.py
@@ -309,17 +333,20 @@ echo '{}' | python statusline.py
 ## 🔧 Troubleshooting
 
 ### Statusline not showing?
-1. Verify you're using a GAC Code model
+
+1. Verify you're using a Claude model (GAC API data only shows for Claude models)
 2. Check token configuration: `python set-gac-token.py show`
 3. Test API connectivity: `python statusline.py`
 4. Restart Claude Code
 
 ### API call failures?
+
 - Ensure your token is valid and not expired
 - Check network connectivity
 - Verify GAC Code API service status
 
 ### Display encoding issues?
+
 - Ensure your terminal supports UTF-8 encoding
 - On Windows, try running: `chcp 65001`
 
@@ -336,6 +363,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🤝 Support
 
 If you find this project helpful, please consider:
+
 - ⭐ Starring the repository
 - 🐛 Reporting issues
 - 💡 Suggesting new features

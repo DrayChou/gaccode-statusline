@@ -2,6 +2,7 @@
 api-token.txt
 statusline-cache.json
 statusline-config.json
+session-info-cache.json
 
 # 调试和测试文件
 debug-*.py

@@ -410,7 +410,17 @@ def calculate_next_refill_time(last_refill_str, refill_rate):
         
         # 如果已经过了刷新时间，说明还没有开始新的周期
         if remaining_seconds < 0:
-            return "等待刷新"
+            # 计算过了多久
+            overdue_seconds = abs(remaining_seconds)
+            overdue_hours = int(overdue_seconds // 3600)
+            overdue_minutes = int((overdue_seconds % 3600) // 60)
+            
+            if overdue_hours > 0:
+                return f"overdue {overdue_hours}h{overdue_minutes}m"
+            elif overdue_minutes > 0:
+                return f"overdue {overdue_minutes}m"
+            else:
+                return "refreshing soon"
         
         # 转换为时分秒
         remaining_hours = int(remaining_seconds // 3600)

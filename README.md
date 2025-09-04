@@ -108,10 +108,10 @@ cd gaccode-statusline
 python set-gac-token.py set "your-gac-api-token"
 ```
 
-3. (Optional) Install ccusage for usage tracking:
+3. (Optional) Test ccusage for usage tracking:
 
 ```bash
-npm install -g @anthropic-ai/ccusage
+npx ccusage
 ```
 
 4. Configure Claude Code by adding to your `.claude/settings.json`:
@@ -313,7 +313,7 @@ The statusline integrates with `npx ccusage` to display today's total usage cost
 ### Requirements
 
 - Node.js and npm installed (for npx)
-- ccusage package: `npm install -g @anthropic-ai/ccusage`
+- ccusage runs with npx: `npx ccusage`
 
 ### Configuration
 
@@ -408,7 +408,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [GAC Code](https://gaccode.com/) for providing the API
 - [Claude Code](https://claude.ai/code) for the amazing development environment
-- [ccusage](https://github.com/anthropics/ccusage) by Anthropic for the excellent usage tracking tool
+- [ccusage](https://github.com/ryoppippi/ccusage) by ryoppippi for the excellent usage tracking tool
 - All contributors who help improve this tool
 
 ## 🤝 Support

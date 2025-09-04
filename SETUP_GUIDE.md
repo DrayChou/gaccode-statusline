@@ -99,7 +99,7 @@ echo '{"model":{"id":"gaccode-test"}}' | python scripts/gaccode.com/statusline.p
 2. **网络要求**: 需要能访问 gaccode.com API
 3. **模型检测**: 只有在使用包含"gac"或"gaccode"的模型时才显示
 4. **错误处理**: API 调用失败时显示 [ERROR] 提示
-5. **今日使用量**: 需要安装 Node.js 和 npm，以及 ccusage 包 (`npm install -g @anthropic-ai/ccusage`)
+5. **今日使用量**: 需要安装 Node.js 和 npm，运行 `npx ccusage` 即可
 
 ## 🎯 状态说明
 

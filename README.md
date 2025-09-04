@@ -20,13 +20,15 @@ A comprehensive and configurable statusline for Claude Code that displays GAC AP
 - 🌐 **Smart Layout**: Single-line or multi-line display options
 - 🎭 **Model Detection**: Only displays GAC API data for Claude models
 - 💾 **Session Caching**: Caches session information for improved performance
+- 📈 **Usage Tracking**: Displays today's usage cost with gaming equipment rarity color coding
+- 🔄 **Async Updates**: Background usage data fetching with lock mechanism to prevent conflicts
 
 ## 📸 Screenshots
 
 **Full Display (Single Line):**
 
 ```
-Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Balance:2692/12000 Expires:09-13(19d) Dir:myproject Git:main*
+Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Today:$74.47 Balance:2692/12000 Expires:09-13(19d) Dir:myproject Git:main*
 ```
 
 **Peak Hour Display with Multiplier:**
@@ -89,6 +91,7 @@ Model:Claude-3.5-Sonnet Time:13:24:15 Balance:2692/12000
 - Python 3.7+
 - Claude Code installed
 - GAC Code API access
+- Node.js and npm (for usage tracking feature)
 
 ### Installation
 
@@ -105,7 +108,13 @@ cd gaccode-statusline
 python set-gac-token.py set "your-gac-api-token"
 ```
 
-3. Configure Claude Code by adding to your `.claude/settings.json`:
+3. (Optional) Install ccusage for usage tracking:
+
+```bash
+npm install -g @anthropic-ai/ccusage
+```
+
+4. Configure Claude Code by adding to your `.claude/settings.json`:
 
 ```json
 {
@@ -118,13 +127,13 @@ python set-gac-token.py set "your-gac-api-token"
 }
 ```
 
-4. (Optional) Customize your display:
+5. (Optional) Customize your display:
 
 ```bash
 python config-statusline.py --interactive
 ```
 
-5. Restart Claude Code to see your statusline!
+6. Restart Claude Code to see your statusline!
 
 ## 📋 Commands
 
@@ -173,6 +182,7 @@ The statusline is fully customizable through the configuration system:
 | `show_balance`              | Display account balance              | `true`        |
 | `show_subscription`         | Display subscription info            | `true`        |
 | `show_session_duration`     | Display session duration             | `false`       |
+| `show_today_usage`          | Display today's usage cost           | `true`        |
 | `directory_full_path`       | Show full path vs directory name     | `true`        |
 | `layout`                    | `single_line` or `multi_line`        | `single_line` |
 | `multiplier_config.enabled` | Enable time-based multiplier display | `true`        |
@@ -186,6 +196,7 @@ The statusline can display the following information:
 - **Model**: AI model name (e.g., Claude-3.5-Sonnet)
 - **Time**: Current time in HH:MM:SS format
 - **Cost**: Session cost (real: $3.75, mock: T2.45)
+- **Today**: Today's usage cost with color coding (e.g., Today:$74.47)
 
 **GAC API Data:**
 
@@ -199,9 +210,22 @@ The statusline can display the following information:
 
 ### Color Coding
 
+#### GAC API Status
 - 🟢 **Green**: Sufficient balance (>1000) / Time remaining (>14 days) / Off-peak periods
 - 🟡 **Yellow**: Warning level (500-1000) / (7-14 days)
 - 🔴 **Red**: Critical level (<500) / (<7 days) / Peak periods
+
+#### Today's Usage (Gaming Equipment Rarity)
+- 🔴 **Red** ($300+) - Exotic
+- 🟠 **Orange** ($200-$299) - Legendary  
+- 🟣 **Purple** ($100-$199) - Artifact
+- 🟪 **Magenta** ($50-$99) - Epic
+- 🔵 **Blue** ($20-$49) - Rare
+- 🔷 **Light Blue** ($10-$19) - Exceptional
+- 🟢 **Green** ($5-$9) - Fine
+- 🟩 **Light Green** ($2-$4) - Uncommon
+- ⚪ **White** ($0.5-$1.9) - Common
+- ⚫ **Grey** (<$0.5) - Poor
 
 ## 🕒 Time-based Multipliers
 
@@ -272,6 +296,32 @@ You can add additional time periods by extending the `periods` array:
   "display_text": "1.5X",
   "weekdays_only": false,
   "color": "yellow"
+}
+```
+
+## 📈 Usage Tracking
+
+The statusline integrates with `npx ccusage` to display today's total usage cost with a gaming equipment rarity color scheme.
+
+### Features
+
+- **Automatic Updates**: Background fetching via `update_usage.py` with 10-minute timeout
+- **Lock Mechanism**: Prevents multiple simultaneous updates with 30-minute cooldown
+- **Color Coding**: 10-level rarity system from Poor (grey) to Exotic (red)
+- **Smart Caching**: Usage data cached to avoid frequent API calls
+
+### Requirements
+
+- Node.js and npm installed (for npx)
+- ccusage package: `npm install -g @anthropic-ai/ccusage`
+
+### Configuration
+
+Enable/disable today's usage display in `statusline-config.json`:
+
+```json
+{
+  "show_today_usage": true
 }
 ```
 
@@ -358,6 +408,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [GAC Code](https://gaccode.com/) for providing the API
 - [Claude Code](https://claude.ai/code) for the amazing development environment
+- [ccusage](https://github.com/anthropics/ccusage) by Anthropic for the excellent usage tracking tool
 - All contributors who help improve this tool
 
 ## 🤝 Support

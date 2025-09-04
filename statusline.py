@@ -24,8 +24,10 @@ TOKEN_FILE = PROJECT_DIR / "api-token.txt"
 CACHE_FILE = PROJECT_DIR / "statusline-cache.json"
 CONFIG_FILE = PROJECT_DIR / "statusline-config.json"
 SESSION_INFO_FILE = PROJECT_DIR / "session-info-cache.json"
+USAGE_CACHE_FILE = PROJECT_DIR / "usage-cache.json"  # 新增：使用量缓存文件
 BALANCE_CACHE_TIMEOUT = 60  # 余额缓存60秒
 SUBSCRIPTION_CACHE_TIMEOUT = 3600  # 订阅信息缓存1小时
+USAGE_CACHE_TIMEOUT = 600  # 使用量缓存10分钟
 
 # 默认显示配置
 DEFAULT_CONFIG = {
@@ -37,6 +39,7 @@ DEFAULT_CONFIG = {
     "show_session_cost": True,
     "show_balance": True,
     "show_subscription": True,
+    "show_today_usage": True,  # 新增：显示今日使用量
     "directory_full_path": True,
     "layout": "single_line",  # single_line 或 multi_line
     "multiplier_config": {
@@ -283,6 +286,68 @@ def format_session_cost(session_info):
         return None
 
 
+def check_npx_available():
+    """检查 npx 是否可用"""
+    try:
+        # Windows 上使用 npx.cmd
+        subprocess.run(["npx.cmd", "--version"], capture_output=True, check=True, timeout=10)
+        return True
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
+        return False
+
+
+def get_today_usage():
+    """获取今日使用量"""
+    # 首先检查缓存文件是否存在
+    if USAGE_CACHE_FILE.exists():
+        try:
+            with open(USAGE_CACHE_FILE, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+                cache_time = datetime.fromisoformat(cache_data.get("timestamp", ""))
+                # 如果缓存未过期（5分钟），直接使用缓存
+                if (datetime.now() - cache_time).total_seconds() <= USAGE_CACHE_TIMEOUT:
+                    return cache_data.get("usage_data")
+        except Exception:
+            # 缓存文件损坏，删除它
+            try:
+                USAGE_CACHE_FILE.unlink()
+            except Exception:
+                pass
+
+    # 如果 npx 不可用，直接返回 None
+    if not check_npx_available():
+        return None
+
+    # 获取今日日期
+    today = datetime.now().strftime("%Y%m%d")
+
+    try:
+        # 异步更新缓存 - 不等待结果，直接返回当前缓存或 None
+        # 使用 subprocess.Popen 在后台运行
+        subprocess.Popen(
+            ["python", str(PROJECT_DIR / "update_usage.py"), today],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+    # 返回当前的缓存数据（如果有的话）
+    if USAGE_CACHE_FILE.exists():
+        try:
+            with open(USAGE_CACHE_FILE, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+                return cache_data.get("usage_data")
+        except Exception:
+            pass
+
+    return None
+
+
 def load_cache():
     """加载缓存数据"""
     if not CACHE_FILE.exists():
@@ -392,41 +457,41 @@ def calculate_next_refill_time(last_refill_str, refill_rate):
     """计算下一次刷新时间"""
     try:
         # 解析带时区的时间戳
-        if last_refill_str.endswith('Z'):
+        if last_refill_str.endswith("Z"):
             # UTC时间
-            last_refill = datetime.fromisoformat(last_refill_str.replace('Z', '+00:00'))
+            last_refill = datetime.fromisoformat(last_refill_str.replace("Z", "+00:00"))
         else:
             # 已有时区信息
             last_refill = datetime.fromisoformat(last_refill_str)
-        
+
         # 获取当前UTC时间
         now = datetime.now(timezone.utc)
-        
+
         # 计算下一次刷新时间：上次刷新时间 + 1小时
         next_refill_time = last_refill + timedelta(hours=1)
-        
+
         # 计算剩余时间
         remaining_seconds = (next_refill_time - now).total_seconds()
-        
+
         # 如果已经过了刷新时间，说明还没有开始新的周期
         if remaining_seconds < 0:
             # 计算过了多久
             overdue_seconds = abs(remaining_seconds)
             overdue_hours = int(overdue_seconds // 3600)
             overdue_minutes = int((overdue_seconds % 3600) // 60)
-            
+
             if overdue_hours > 0:
                 return f"overdue {overdue_hours}h{overdue_minutes}m"
             elif overdue_minutes > 0:
                 return f"overdue {overdue_minutes}m"
             else:
                 return "refreshing soon"
-        
+
         # 转换为时分秒
         remaining_hours = int(remaining_seconds // 3600)
         remaining_minutes = int((remaining_seconds % 3600) // 60)
         remaining_seconds = int(remaining_seconds % 60)
-        
+
         # 如果剩余时间不足1分钟，显示秒数
         if remaining_hours == 0 and remaining_minutes == 0:
             return f"{remaining_seconds}s"
@@ -505,11 +570,40 @@ def display_status():
         if session_cost:
             status_parts.append(f"Cost:{magenta}{session_cost}{reset}")
 
-    # 5. 目录信息 (放到secondary_parts)
+    # 5. 今日使用量
+    if config["show_today_usage"]:
+        usage_data = get_today_usage()
+        if usage_data:
+            usage_cost = usage_data.get("total_cost", 0)
+            if usage_cost > 0:
+                # 根据使用量设置颜色 - 新10级装备颜色方案
+                if usage_cost >= 300:
+                    usage_color = "\033[38;5;196m"  # 红色 - 不朽 (Exotic) #FF0000
+                elif usage_cost >= 200:
+                    usage_color = "\033[38;5;208m"  # 橙色 - 传说 (Legendary) #FF8C00
+                elif usage_cost >= 100:
+                    usage_color = "\033[38;5;128m"  # 紫色 - 神器 (Artifact) #800080
+                elif usage_cost >= 50:
+                    usage_color = "\033[38;5;201m"  # 品红 - 史诗 (Epic) #FF00FF
+                elif usage_cost >= 20:
+                    usage_color = "\033[38;5;21m"  # 蓝色 - 稀有 (Rare) #0000FF
+                elif usage_cost >= 10:
+                    usage_color = "\033[38;5;117m"  # 浅蓝 - 卓越 (Exceptional) #87CEEB
+                elif usage_cost >= 5:
+                    usage_color = "\033[38;5;34m"  # 绿色 - 精良 (Fine) #008000
+                elif usage_cost >= 2:
+                    usage_color = "\033[38;5;120m"  # 浅绿 - 优秀 (Uncommon) #98E088
+                elif usage_cost >= 0.5:
+                    usage_color = "\033[38;5;255m"  # 白色 - 普通 (Common) #FFFFFF
+                else:
+                    usage_color = "\033[38;5;242m"  # 灰色 - 劣质 (Poor) #6D6D6D
+                status_parts.append(f"Today:{usage_color}${usage_cost:.2f}{reset}")
+
+    # 6. 目录信息 (放到secondary_parts)
     if config["show_directory"]:
         secondary_parts.append(f"Dir:{cyan}{dir_display}{reset}")
 
-    # 6. Git信息 (放到secondary_parts)
+    # 7. Git信息 (放到secondary_parts)
     if config["show_git_branch"] and git_info:
         branch_text = f"{git_info['branch']}"
         if git_info["is_dirty"]:
@@ -536,11 +630,15 @@ def display_status():
                     balance = balance_data["balance"]
                     credit_cap = balance_data["creditCap"]
                     balance_color = get_color_code(balance, [500, 1000])
-                    
+
                     # 获取下一次刷新时间
                     last_refill = balance_data.get("lastRefill")
                     refill_rate = balance_data.get("refillRate", 0)
-                    next_refill_time = calculate_next_refill_time(last_refill, refill_rate) if last_refill else "未知"
+                    next_refill_time = (
+                        calculate_next_refill_time(last_refill, refill_rate)
+                        if last_refill
+                        else "未知"
+                    )
 
                     # 获取倍数信息
                     multiplier_info = get_multiplier_info(config)
@@ -549,7 +647,7 @@ def display_status():
                     balance_str = (
                         f"Balance:{balance_color}{balance}{reset}/{credit_cap}"
                     )
-                    
+
                     # 添加下一次刷新时间
                     if next_refill_time != "未知":
                         balance_str += f" ({next_refill_time})"

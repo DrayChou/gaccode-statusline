@@ -9,8 +9,11 @@
 ├── scripts/gaccode.com/
 │   ├── statusline.py          # ✅ 状态栏主脚本
 │   ├── set-gac-token.py       # ✅ Token管理工具
+│   ├── update_usage.py        # ✅ 使用量更新脚本
+│   ├── usage-cache.json       # ✅ 使用量缓存文件
 │   ├── api-token.txt          # ✅ API Token文件
-│   └── statusline-cache.json  # ✅ 缓存文件
+│   ├── statusline-cache.json  # ✅ 缓存文件
+│   └── statusline-config.json # ✅ 显示配置文件
 └── settings.json              # ✅ 已配置statusLine
 ```
 
@@ -42,7 +45,7 @@ python scripts/gaccode.com/set-gac-token.py set "your-new-token"
 
 ### 3. 重启 Claude Code
 
-重启后即可看到状态栏显示：`Balance:444/12000 Expires:09-13(18d)`
+重启后即可看到状态栏显示：`Balance:444/12000 Expires:09-13(18d) Today:$74.47`
 
 ## 📊 状态栏说明
 
@@ -50,12 +53,26 @@ python scripts/gaccode.com/set-gac-token.py set "your-new-token"
 
 - `Balance:266/12000` - 当前余额/总额度
 - `Expires:09-13(18d)` - 订阅到期日期(剩余天数)
+- `Today:$74.47` - 今日使用花费（彩色显示）
 
 ### 颜色编码
 
+#### GAC API 状态
 - 🟢 **绿色**：余额充足(>1000) / 时间充足(>14 天)
 - 🟡 **黄色**：余额警告(500-1000) / 时间警告(7-14 天)
 - 🔴 **红色**：余额不足(<500) / 即将到期(<7 天)
+
+#### 今日使用量（游戏装备稀有度配色）
+- 🔴 **红色** ($300+) - 不朽 (Exotic)
+- 🟠 **橙色** ($200-$299) - 传说 (Legendary)  
+- 🟣 **紫色** ($100-$199) - 神器 (Artifact)
+- 🟪 **品红** ($50-$99) - 史诗 (Epic)
+- 🔵 **蓝色** ($20-$49) - 稀有 (Rare)
+- 🔷 **浅蓝** ($10-$19) - 卓越 (Exceptional)
+- 🟢 **绿色** ($5-$9) - 精良 (Fine)
+- 🟩 **浅绿** ($2-$4) - 优秀 (Uncommon)
+- ⚪ **白色** ($0.5-$1.9) - 普通 (Common)
+- ⚫ **灰色** (<$0.5) - 劣质 (Poor)
 
 ### 智能显示
 
@@ -82,6 +99,7 @@ echo '{"model":{"id":"gaccode-test"}}' | python scripts/gaccode.com/statusline.p
 2. **网络要求**: 需要能访问 gaccode.com API
 3. **模型检测**: 只有在使用包含"gac"或"gaccode"的模型时才显示
 4. **错误处理**: API 调用失败时显示 [ERROR] 提示
+5. **今日使用量**: 需要安装 Node.js 和 npm，以及 ccusage 包 (`npm install -g @anthropic-ai/ccusage`)
 
 ## 🎯 状态说明
 

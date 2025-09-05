@@ -163,8 +163,8 @@ try {
     }
     
     # 确保 data 子目录存在
-    $DataConfigDir = Join-Path $PluginPath "config"
-    $DataCacheDir = Join-Path $PluginPath "cache"
+    $DataConfigDir = Join-Path $PluginPath "data\config"
+    $DataCacheDir = Join-Path $PluginPath "data\cache"
     
     if (-not (Test-Path $DataConfigDir)) {
         New-Item -ItemType Directory -Path $DataConfigDir -Force | Out-Null

@@ -13,8 +13,13 @@ from pathlib import Path
 
 # 获取脚本所在目录
 PROJECT_DIR = Path(__file__).parent
-USAGE_CACHE_FILE = PROJECT_DIR / "usage-cache.json"
-LOCK_FILE = PROJECT_DIR / "update_usage.lock"
+DATA_DIR = PROJECT_DIR / "data"
+USAGE_CACHE_FILE = DATA_DIR / "cache" / "usage-cache.json"
+LOCK_FILE = DATA_DIR / "cache" / "update_usage.lock"
+
+# 确保目录存在
+(DATA_DIR / "cache").mkdir(parents=True, exist_ok=True)
+(DATA_DIR / "logs").mkdir(parents=True, exist_ok=True)
 COOLDOWN_MINUTES = 30
 
 
@@ -22,15 +27,15 @@ def is_lock_valid():
     """检查锁文件是否有效（存在且未超过冷却时间）"""
     if not LOCK_FILE.exists():
         return False
-    
+
     try:
-        with open(LOCK_FILE, "r", encoding="utf-8") as f:
+        with open(LOCK_FILE, "r", encoding="utf-8-sig") as f:
             lock_time = datetime.fromisoformat(f.read().strip())
-        
+
         # 如果锁文件超过冷却时间，则视为无效
         if datetime.now() - lock_time > timedelta(minutes=COOLDOWN_MINUTES):
             return False
-        
+
         return True
     except Exception:
         # 锁文件损坏，视为无效
@@ -40,7 +45,7 @@ def is_lock_valid():
 def create_lock():
     """创建锁文件"""
     try:
-        with open(LOCK_FILE, "w", encoding="utf-8") as f:
+        with open(LOCK_FILE, "w", encoding="utf-8-sig") as f:
             f.write(datetime.now().isoformat())
         return True
     except Exception:
@@ -61,22 +66,24 @@ def update_usage_cache(today_date):
     # 检查锁文件
     if is_lock_valid():
         # 记录跳过执行
-        log_file = PROJECT_DIR / "update_usage.log"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now().isoformat()} - Skipped: Lock file exists and is valid\n")
+        log_file = DATA_DIR / "logs" / "update_usage.log"
+        with open(log_file, "a", encoding="utf-8-sig") as f:
+            f.write(
+                f"{datetime.now().isoformat()} - Skipped: Lock file exists and is valid\n"
+            )
         return False
-    
+
     # 创建锁文件
     if not create_lock():
         return False
-    
+
     try:
         # Windows 上使用 npx.cmd
         cmd = ["npx.cmd", "ccusage", "daily", "--json", "--since", today_date]
 
         # 记录调试信息
-        log_file = PROJECT_DIR / "update_usage.log"
-        with open(log_file, "a", encoding="utf-8") as f:
+        log_file = DATA_DIR / "logs" / "update_usage.log"
+        with open(log_file, "a", encoding="utf-8-sig") as f:
             f.write(f"{datetime.now().isoformat()} - Running: {' '.join(cmd)}\n")
 
         # 调用 ccusage 获取今日使用量
@@ -89,7 +96,7 @@ def update_usage_cache(today_date):
         )
 
         # 记录输出
-        with open(log_file, "a", encoding="utf-8") as f:
+        with open(log_file, "a", encoding="utf-8-sig") as f:
             f.write(
                 f"{datetime.now().isoformat()} - ccusage output: {result.stdout[:500]}...\n"
             )
@@ -110,22 +117,22 @@ def update_usage_cache(today_date):
 
             # 保存到缓存文件
             cache_data = {"timestamp": datetime.now().isoformat(), "usage_data": usage}
-            with open(USAGE_CACHE_FILE, "w", encoding="utf-8") as f:
+            with open(USAGE_CACHE_FILE, "w", encoding="utf-8-sig") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
 
             # 记录成功
-            with open(log_file, "a", encoding="utf-8") as f:
+            with open(log_file, "a", encoding="utf-8-sig") as f:
                 f.write(f"{datetime.now().isoformat()} - Cache updated successfully\n")
 
             return True
         else:
-            with open(log_file, "a", encoding="utf-8") as f:
+            with open(log_file, "a", encoding="utf-8-sig") as f:
                 f.write(f"{datetime.now().isoformat()} - No daily data found\n")
     except Exception as e:
         # 记录详细错误信息到日志文件
         try:
-            log_file = PROJECT_DIR / "update_usage.log"
-            with open(log_file, "a", encoding="utf-8") as f:
+            log_file = DATA_DIR / "logs" / "update_usage.log"
+            with open(log_file, "a", encoding="utf-8-sig") as f:
                 f.write(f"{datetime.now().isoformat()} - Error: {str(e)}\n")
                 f.write(
                     f"{datetime.now().isoformat()} - Traceback: {traceback.format_exc()}\n"

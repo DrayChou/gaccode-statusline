@@ -1,0 +1,58 @@
+﻿{
+  "platforms": {
+    "gaccode": {
+      "name": "GAC Code",
+      "api_base_url": "https://gaccode.com/api",
+      "api_key": "",
+      "login_token": "",
+      "model": "claude-3-5-sonnet-20241022",
+      "small_model": "claude-3-5-haiku-20241022",
+      "enabled": false
+    },
+    "kimi": {
+      "name": "Kimi (月之暗面)",
+      "api_base_url": "https://api.moonshot.cn/v1",
+      "api_key": "",
+      "model": "moonshot-v1-8k",
+      "small_model": "moonshot-v1-8k",
+      "enabled": false
+    },
+    "deepseek": {
+      "name": "DeepSeek",
+      "api_base_url": "https://api.deepseek.com",
+      "api_key": "",
+      "model": "deepseek-chat",
+      "small_model": "deepseek-chat",
+      "enabled": false
+    },
+    "siliconflow": {
+      "name": "SiliconFlow",
+      "api_base_url": "https://api.siliconflow.cn/v1",
+      "api_key": "",
+      "model": "deepseek-ai/deepseek-v3.1",
+      "small_model": "deepseek-ai/deepseek-v3.1",
+      "enabled": false
+    },
+    "local_proxy": {
+      "name": "Local Proxy",
+      "api_base_url": "http://localhost:7601",
+      "api_key": "local-key",
+      "model": "deepseek-v3.1",
+      "small_model": "deepseek-v3.1",
+      "enabled": true,
+      "proxy_for": "deepseek"
+    }
+  },
+  "aliases": {
+    "gc": "gaccode",
+    "dp": "deepseek", 
+    "ds": "deepseek",
+    "sf": "siliconflow",
+    "lp": "local_proxy",
+    "local": "local_proxy"
+  },
+  "settings": {
+    "default_platform": "gaccode",
+    "plugin_path": "../data"
+  }
+}

@@ -63,3 +63,11 @@ logs/
 # 
 .lh/
 .claude/
+CLAUDE.md
+data/cache/balance-cache-*.json
+data/cache/session-mappings.json
+data/config/platform-config.json
+session-mappings.json
+platform-config.json
+data/cache/gac-history-cache.json
+data/cache/gac-multiplier-segments.json

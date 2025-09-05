@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Simplified Multi-Platform Manager
+精简的多平台管理器，整合配置管理和session映射
+"""
+
+import json
+import sys
+import uuid
+from pathlib import Path
+from typing import Dict, Any, Optional
+from datetime import datetime
+
+# Import logger system
+try:
+    # Try absolute import first (for Pylance/static analysis)
+    from data.logger import log_message
+except ImportError:
+    # Fallback to sys.path manipulation for runtime
+    sys.path.insert(0, str(Path(__file__).parent / "data"))
+    from logger import log_message
+
+
+class PlatformManager:
+    """精简的多平台管理器"""
+
+    def __init__(self):
+        self.project_dir = Path(__file__).parent
+        self.data_dir = self.project_dir / "data"
+        self.config_file = self.data_dir / "config" / "platform-config.json"
+        self.session_file = self.data_dir / "cache" / "session-mappings.json"
+
+        # 确保目录存在
+        (self.data_dir / "config").mkdir(parents=True, exist_ok=True)
+        (self.data_dir / "cache").mkdir(parents=True, exist_ok=True)
+
+    def get_default_config(self) -> Dict[str, Any]:
+        """默认配置"""
+        return {
+            "platforms": {
+                "gaccode": {
+                    "name": "GAC Code",
+                    "api_base_url": "https://gaccode.com/api",
+                    "api_key": "",
+                    "model": "claude-3-5-sonnet-20241022",
+                    "small_model": "claude-3-5-haiku-20241022",
+                    "enabled": False,
+                },
+                "kimi": {
+                    "name": "Kimi (月之暗面)",
+                    "api_base_url": "https://api.moonshot.cn/v1",
+                    "api_key": "",
+                    "model": "moonshot-v1-8k",
+                    "small_model": "moonshot-v1-8k",
+                    "enabled": False,
+                },
+                "deepseek": {
+                    "name": "DeepSeek",
+                    "api_base_url": "https://api.deepseek.com",
+                    "api_key": "",
+                    "model": "deepseek-chat",
+                    "small_model": "deepseek-chat",
+                    "enabled": False,
+                },
+                "siliconflow": {
+                    "name": "SiliconFlow",
+                    "api_base_url": "https://api.siliconflow.cn/v1",
+                    "api_key": "",
+                    "model": "deepseek-ai/deepseek-v3.1",
+                    "small_model": "deepseek-ai/deepseek-v3.1",
+                    "enabled": False,
+                },
+                "local_proxy": {
+                    "name": "Local Proxy",
+                    "api_base_url": "http://localhost:7601",
+                    "api_key": "local-key",
+                    "model": "deepseek-v3.1",
+                    "small_model": "deepseek-v3.1",
+                    "enabled": False,
+                    "proxy_for": "deepseek",
+                },
+            },
+            "aliases": {
+                "gc": "gaccode",
+                "dp": "deepseek",
+                "ds": "deepseek",
+                "sf": "siliconflow",
+                "lp": "local_proxy",
+                "local": "local_proxy",
+            },
+            "settings": {
+                "default_platform": "gaccode",
+                "created": datetime.now().isoformat(),
+            },
+        }
+
+    def load_config(self) -> Dict[str, Any]:
+        """加载配置"""
+        log_message(
+            "platform-manager",
+            "DEBUG",
+            "Loading platform configuration",
+            {"config_file": str(self.config_file)},
+        )
+
+        if not self.config_file.exists():
+            log_message(
+                "platform-manager",
+                "WARNING",
+                "Configuration file not found, creating default config",
+            )
+            config = self.get_default_config()
+            self.save_config(config)
+            return config
+
+        try:
+            with open(self.config_file, "r", encoding="utf-8-sig") as f:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    "Platform configuration loaded successfully",
+                )
+                return json.load(f)
+        except Exception:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                "Failed to load configuration, using default config",
+                {"error": str(sys.exc_info()[1])},
+            )
+            return self.get_default_config()
+
+    def save_config(self, config: Dict[str, Any]) -> bool:
+        """保存配置"""
+        try:
+            config["settings"]["last_updated"] = datetime.now().isoformat()
+            with open(self.config_file, "w", encoding="utf-8-sig") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            return True
+        except Exception as e:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                "Failed to save configuration",
+                {"error": str(e)},
+            )
+            return False
+
+    def resolve_platform_alias(self, platform_or_alias: str) -> str:
+        """解析平台别名到实际平台名"""
+        config = self.load_config()
+        aliases = config.get("aliases", {})
+        return aliases.get(platform_or_alias, platform_or_alias)
+
+    def get_platform_config(self, platform: str) -> Optional[Dict[str, Any]]:
+        """获取平台配置（支持别名）"""
+        config = self.load_config()
+        resolved_platform = self.resolve_platform_alias(platform)
+        return config.get("platforms", {}).get(resolved_platform)
+
+    def set_platform_key(self, platform: str, api_key: str) -> bool:
+        """设置平台API key（支持别名）"""
+        config = self.load_config()
+        resolved_platform = self.resolve_platform_alias(platform)
+        if resolved_platform in config["platforms"]:
+            config["platforms"][resolved_platform]["api_key"] = api_key
+            config["platforms"][resolved_platform]["enabled"] = bool(api_key)
+            return self.save_config(config)
+        return False
+
+    def get_enabled_platforms(self) -> Dict[str, Dict[str, Any]]:
+        """获取启用的平台"""
+        config = self.load_config()
+        enabled = {}
+        for platform, platform_config in config["platforms"].items():
+            if platform_config.get("enabled") and platform_config.get("api_key"):
+                enabled[platform] = platform_config
+        return enabled
+
+    def register_session(
+        self,
+        platform: str,
+        session_uuid: str,
+    ) -> bool:
+        """注册session到平台的映射关系"""
+        try:
+            # 读取现有mappings
+            mappings = {}
+            if self.session_file.exists():
+                with open(self.session_file, "r", encoding="utf-8-sig") as f:
+                    mappings = json.load(f)
+
+            # 添加新的session映射，只存储平台名称
+            mappings[session_uuid] = {
+                "platform": platform,
+                "created": datetime.now().isoformat(),
+            }
+
+            # 清理旧mappings（保留最近50个）
+            if len(mappings) > 50:
+                sorted_items = sorted(
+                    mappings.items(),
+                    key=lambda x: x[1].get("created", ""),
+                    reverse=True,
+                )
+                mappings = dict(sorted_items[:50])
+
+            # 保存mappings
+            with open(self.session_file, "w", encoding="utf-8-sig") as f:
+                json.dump(mappings, f, indent=2, ensure_ascii=False)
+
+            return True
+        except Exception:
+            return False
+
+    def get_session_config(self, session_uuid: str) -> Optional[Dict[str, Any]]:
+        """根据session UUID获取完整配置"""
+        try:
+            if not self.session_file.exists():
+                return None
+
+            # Use utf-8-sig to handle UTF-8 BOM that may be present in the file
+            with open(self.session_file, "r", encoding="utf-8-sig") as f:
+                mappings = json.load(f)
+                return mappings.get(session_uuid)
+        except Exception:
+            return None
+
+    def get_current_session_config(self) -> Optional[Dict[str, Any]]:
+        """获取当前session的完整配置"""
+        try:
+            session_info_file = self.data_dir / "cache" / "session-info-cache.json"
+            if not session_info_file.exists():
+                return None
+
+            with open(session_info_file, "r", encoding="utf-8-sig") as f:
+                session_info = json.load(f)
+                session_id = session_info.get("session_id")
+
+                if session_id:
+                    return self.get_session_config(session_id)
+        except Exception:
+            pass
+
+        return None
+
+    def detect_platform_from_session(self) -> Optional[str]:
+        """从当前session检测平台"""
+        session_config = self.get_current_session_config()
+        return session_config.get("platform") if session_config else None
+
+    def generate_session_uuid(self) -> str:
+        """生成新的session UUID"""
+        return str(uuid.uuid4())
+
+    def migrate_old_config(self) -> bool:
+        """迁移旧的token文件"""
+        old_token_file = self.project_dir / "api-token.txt"
+        if old_token_file.exists():
+            try:
+                with open(old_token_file, "r", encoding="utf-8-sig") as f:
+                    old_token = f.read().strip()
+                if old_token:
+                    return self.set_platform_key("gaccode", old_token)
+            except Exception:
+                pass
+        return False
+
+    def list_platforms(self) -> None:
+        """列出所有平台状态"""
+        config = self.load_config()
+        print("Platform Status:")
+        print("=" * 50)
+
+        for platform, platform_config in config["platforms"].items():
+            status = (
+                "[OK]"
+                if (platform_config.get("enabled") and platform_config.get("api_key"))
+                else "[--]"
+            )
+            print(f"{status} {platform}: {platform_config['name']}")
+            print(f"   URL: {platform_config['api_base_url']}")
+            print(f"   Model: {platform_config['model']}")
+            print(f"   Key: {'Set' if platform_config.get('api_key') else 'Not Set'}")
+            print()
+
+
+# 便捷函数
+def get_platform_token(platform: str) -> Optional[str]:
+    """获取平台token"""
+    manager = PlatformManager()
+    platform_config = manager.get_platform_config(platform)
+    return platform_config.get("api_key") if platform_config else None
+
+
+if __name__ == "__main__":
+    import sys
+
+    manager = PlatformManager()
+
+    if len(sys.argv) < 2:
+        manager.list_platforms()
+        sys.exit(0)
+
+    command = sys.argv[1]
+
+    if command == "list":
+        manager.list_platforms()
+    elif command == "set-key" and len(sys.argv) == 4:
+        platform, key = sys.argv[2], sys.argv[3]
+        if manager.set_platform_key(platform, key):
+            print(f"[OK] API key set for {platform}")
+        else:
+            print(f"[FAIL] Failed to set API key for {platform}")
+    elif command == "get-key" and len(sys.argv) == 3:
+        platform = sys.argv[2]
+        key = get_platform_token(platform)
+        print(f"{platform}: {key if key else 'Not set'}")
+    else:
+        print(
+            "Usage: python platform_manager.py [list|set-key <platform> <key>|get-key <platform>]"
+        )

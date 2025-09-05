@@ -1,88 +1,71 @@
-# GAC Code Status Line
+# GAC Code Multi-Platform Status Line
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 
-A comprehensive and configurable statusline for Claude Code that displays GAC API balance, subscription information, and development context in real-time.
+A comprehensive multi-platform statusline for Claude Code that supports GAC Code, Kimi, DeepSeek, SiliconFlow, and Local Proxy APIs. Displays balance, subscription information, and development context in real-time with automatic platform detection.
 
 ## ✨ Features
 
+### Multi-Platform Support
+- 🌐 **Multiple API Providers**: GAC Code, Kimi (月之暗面), DeepSeek, SiliconFlow, Local Proxy
+- 🔄 **Auto Platform Detection**: UUID-based session mapping with 100% accuracy
+- 🚀 **Quick Launch Scripts**: Simple alias-based launcher (e.g., `cc.mp.ps1 dp` for DeepSeek)
+- 🔑 **Unified Configuration**: Single configuration file for all platforms
+
+### Real-time Status Display
 - 🔄 **Real-time Updates**: Displays current balance and subscription status
 - 🎨 **Color-coded Status**: Visual indicators for balance and expiry warnings
-- ⚡ **Multi-tier Caching**: 1-second UI refresh, 1-minute balance cache, 1-hour subscription cache
-- 🕒 **Smart Time-based Multipliers**: Visual indicators for peak/off-peak periods with configurable multipliers
-- 🔒 **Secure Token Management**: Local token storage with management tools
-- 🖥️ **Cross-platform**: Works on Windows, macOS, and Linux
-- 🎯 **Claude Code Integration**: Seamless integration with Claude Code statusline
-- ⚙️ **Fully Configurable**: Customizable display components and layout
+- ⚡ **Multi-tier Caching**: 1-second UI refresh, 5-minute balance cache, 1-hour subscription cache
+- 🕒 **Dynamic Multiplier Detection**: API-based multiplier detection with time-based fallback
+- ⚠️ **Smart Warning System**: Red alerts when API/time-based multipliers mismatch
 - 📊 **Rich Context**: Shows model, time, session cost, directory, Git branch
-- 🌐 **Smart Layout**: Single-line or multi-line display options
-- 🎭 **Model Detection**: Only displays GAC API data for Claude models
+- 📈 **Usage Tracking**: Today's usage cost with gaming equipment rarity color coding
+
+### Advanced Features
+- 🔒 **Secure Management**: Local configuration with automatic sync to plugin
+- 🖥️ **Cross-platform**: Works on Windows, macOS, and Linux
+- 🎯 **Claude Code Integration**: Seamless statusline integration
+- ⚙️ **Fully Configurable**: Customizable display components and layout
 - 💾 **Session Caching**: Caches session information for improved performance
-- 📈 **Usage Tracking**: Displays today's usage cost with gaming equipment rarity color coding
-- 🔄 **Async Updates**: Background usage data fetching with lock mechanism to prevent conflicts
 
 ## 📸 Screenshots
 
-**Full Display (Single Line):**
+**Multi-Platform Display Examples:**
 
 ```
-Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Today:$74.47 Balance:2692/12000 Expires:09-13(19d) Dir:myproject Git:main*
+# GAC Code - Normal Hours
+Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Today:$74.47 GAC.B:2692/12000 (45m30s) Dir:myproject Git:main*
+
+# GAC Code - 2x Multiplier Period
+Model:Claude-3.5-Sonnet Time:16:45:15 Cost:$7.50 Today:$149.23 GAC.B:1845/12000 2x (23m15s) Dir:myproject Git:main*
+
+# GAC Code - High Multiplier Warning
+Model:Claude-3.5-Sonnet Time:20:30:15 Cost:$15.00 Today:$298.75 GAC.B:1203/12000 !5x (12m42s) Dir:myproject Git:main*
+
+# DeepSeek
+Model:deepseek-v3.1 Time:13:24:15 Cost:$2.15 Balance:¥45.60/¥100 Dir:myproject Git:main*
+
+# Kimi (月之暗面)  
+Model:moonshot-v1-8k Time:13:24:15 Cost:¥1.85 Balance:¥23.40/¥50 Dir:myproject Git:main*
+
+# SiliconFlow
+Model:deepseek-ai/deepseek-v3.1 Time:13:24:15 Cost:$1.95 Balance:$18.75/$30 Dir:myproject Git:main*
 ```
 
-**Peak Hour Display with Multiplier:**
+**Color-coded Status Examples:**
+| Status | Balance Display | Multiplier Display | Expires Display |
+|--------|------------------|--------------------|-----------------|
+| 🟢 Healthy | `GAC.B:`<span style="color:green">**3500**</span>`/12000` | <span style="color:yellow">**2x**</span> | `Expires:`<span style="color:green">**09-25(30d)**</span> |
+| 🟡 Warning | `GAC.B:`<span style="color:orange">**750**</span>`/12000` | <span style="color:purple">**5x**</span> | `Expires:`<span style="color:orange">**09-18(10d)**</span> |
+| 🔴 Critical | `GAC.B:`<span style="color:red">**350**</span>`/12000` | <span style="color:red">**!10x**</span> | `Expires:`<span style="color:red">**09-15(3d)**</span> |
 
-```
-Model:Claude-3.5-Sonnet Time:17:00:23 Cost:$3.75 Balance:2692/12000 [5X] Expires:09-13(19d) Dir:myproject Git:main
-```
-
-**Off-peak Display with Discounted Rate:**
-
-```
-Model:Claude-3.5-Sonnet Time:08:30:15 Cost:$3.75 Balance:2692/12000 [0.8X] Expires:09-13(19d) Dir:myproject Git:main
-```
-
-**Multi-line Layout:**
-
-```
-Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Balance:2692/12000 Expires:09-13(19d)
-Dir:/full/path/to/myproject Git:main*
-```
-
-**Color-coded Examples:**
-| Status | Balance Display | Expires Display |
-|--------|------------------|-----------------|
-| 🟢 Healthy | `Balance:`<span style="color:green">**3500**</span>`/12000` | `Expires:`<span style="color:green">**09-25(30d)**</span> |
-| 🟡 Warning | `Balance:`<span style="color:orange">**750**</span>`/12000` | `Expires:`<span style="color:orange">**09-18(10d)**</span> |
-| 🔴 Critical | `Balance:`<span style="color:red">**350**</span>`/12000` | `Expires:`<span style="color:red">**09-15(3d)**</span> |
-
-**Development Context Examples:**
-
-```
-# Clean repository
-Dir:myproject Git:main
-
-# Uncommitted changes
-Dir:myproject Git:main*
-
-# Feature branch with changes
-Dir:frontend-app Git:feature/login*
-
-# Full path mode
-Dir:/Users/developer/projects/myproject Git:main
-```
-
-**Session Cost Indicators:**
-
-- `Cost:$3.75` - Real session cost with GAC API data
-- `Cost:T2.45` - Mock cost when session data unavailable
-
-**Minimal Configuration:**
-
-```
-Model:Claude-3.5-Sonnet Time:13:24:15 Balance:2692/12000
-```
+**Multiplier Color Coding:**
+- 🟢 **Green** (1x): Regular hours
+- 🟡 **Yellow** (2-4x): Medium multiplier periods  
+- 🟣 **Purple** (5x+): High multiplier periods
+- 🔴 **Red** (!Nx): Warning - API data conflicts with time-based detection
 
 ## 🚀 Quick Start
 
@@ -90,32 +73,29 @@ Model:Claude-3.5-Sonnet Time:13:24:15 Balance:2692/12000
 
 - Python 3.7+
 - Claude Code installed
-- GAC Code API access
+- API access for at least one supported platform
 - Node.js and npm (for usage tracking feature)
 
 ### Installation
 
 1. Clone this repository:
-
 ```bash
 git clone https://github.com/DrayChou/gaccode-statusline.git
 cd gaccode-statusline
 ```
 
-2. Set your API token:
-
+2. Configure your API keys:
 ```bash
-python set-gac-token.py set "your-gac-api-token"
+# Set API key for any platform (supports aliases)
+python platform_manager.py set-key dp "your-deepseek-api-key"
+python platform_manager.py set-key kimi "your-kimi-api-key"
+python platform_manager.py set-key gc "your-gac-api-key"
+
+# View platform status
+python platform_manager.py list
 ```
 
-3. (Optional) Test ccusage for usage tracking:
-
-```bash
-npx ccusage
-```
-
-4. Configure Claude Code by adding to your `.claude/settings.json`:
-
+3. Configure Claude Code statusline in `.claude/settings.json`:
 ```json
 {
   "statusLine": {
@@ -127,33 +107,125 @@ npx ccusage
 }
 ```
 
-5. (Optional) Customize your display:
-
+4. (Optional) Customize display settings:
 ```bash
 python config-statusline.py --interactive
 ```
 
-6. Restart Claude Code to see your statusline!
+## 🎯 Multi-Platform Launcher
 
-## 📋 Commands
+### Quick Launch Scripts
 
-### Token Management
+Use the convenient launcher scripts in the `examples/` directory:
 
-```bash
-# Set a new token
-python set-gac-token.py set "your-token-here"
+**Windows PowerShell:**
+```powershell
+# Launch DeepSeek
+.\examples\cc.mp.ps1 dp
 
-# View current token status
-python set-gac-token.py show
+# Launch Kimi
+.\examples\cc.mp.ps1 kimi
 
-# Remove token
-python set-gac-token.py remove
+# Launch GAC Code
+.\examples\cc.mp.ps1 gc
+
+# Launch SiliconFlow
+.\examples\cc.mp.ps1 sf
+
+# Launch Local Proxy
+.\examples\cc.mp.ps1 local
 ```
+
+**Linux/Mac:**
+```bash
+# Launch DeepSeek
+./examples/cc.mp.sh dp
+
+# Launch Kimi
+./examples/cc.mp.sh kimi
+
+# Launch GAC Code  
+./examples/cc.mp.sh gc
+```
+
+### Supported Platforms & Aliases
+
+| Platform | Full Name | Aliases | API Base |
+|----------|-----------|---------|-----------|
+| **gaccode** | GAC Code | `gc` | `https://gaccode.com/api` |
+| **kimi** | Kimi (月之暗面) | - | `https://api.moonshot.cn/v1` |
+| **deepseek** | DeepSeek | `dp`, `ds` | `https://api.deepseek.com` |
+| **siliconflow** | SiliconFlow | `sf` | `https://api.siliconflow.cn/v1` |
+| **local_proxy** | Local Proxy | `lp`, `local` | `http://localhost:7601` |
 
 ### Configuration Management
 
+All platform configurations are managed through `examples/launcher-config.json`:
+
+```json
+{
+  "platforms": {
+    "gaccode": {
+      "name": "GAC Code",
+      "api_base_url": "https://relay05.gaccode.com/claudecode",
+      "api_key": "sk-ant-oat01-...",
+      "login_token": "eyJhbGciOiJIUzI1NiIs...",
+      "model": "",
+      "small_model": "",
+      "enabled": true
+    },
+    "deepseek": {
+      "name": "DeepSeek",
+      "api_base_url": "https://api.deepseek.com/anthropic",
+      "api_key": "sk-1b056c92bc664787aa6161b5fe091a9a",
+      "model": "deepseek-chat",
+      "small_model": "deepseek-chat",
+      "enabled": true
+    }
+  },
+  "aliases": {
+    "gc": "gaccode",
+    "dp": "deepseek",
+    "ds": "deepseek"
+  },
+  "settings": {
+    "default_platform": "gaccode",
+    "plugin_path": "C:\\Users\\dray\\.claude\\scripts\\gaccode.com"
+  }
+}
+```
+
+### How It Works
+
+1. **Configuration**: Launcher scripts read from `examples/launcher-config.json`
+2. **Platform Selection**: Resolve aliases (e.g., `dp` → `deepseek`)
+3. **Environment Setup**: Set appropriate API keys and endpoints
+4. **Session Mapping**: Register UUID with complete platform configuration
+5. **Plugin Sync**: Automatically sync configuration to plugin directory
+6. **Claude Launch**: Start Claude Code with custom session ID
+
+The statusline plugin then uses the session UUID to lookup platform configuration and display appropriate balance information.
+
+## 📋 Platform Management Commands
+
+### API Key Management
 ```bash
-# Show current configuration
+# Set API keys (supports aliases)
+python platform_manager.py set-key dp "sk-deepseek-key"
+python platform_manager.py set-key kimi "sk-kimi-key"
+python platform_manager.py set-key gc "gac-api-key"
+
+# View API key status
+python platform_manager.py get-key deepseek
+python platform_manager.py get-key dp
+
+# List all platforms
+python platform_manager.py list
+```
+
+### Configuration Management
+```bash
+# Show current statusline configuration
 python config-statusline.py --show
 
 # Interactive configuration wizard
@@ -162,60 +234,42 @@ python config-statusline.py --interactive
 # Set specific options
 python config-statusline.py --set show_git_branch true
 python config-statusline.py --set layout multi_line
-python config-statusline.py --set directory_full_path false
-
-# Reset to defaults
-python config-statusline.py --reset
 ```
 
 ## ⚙️ Configuration Options
 
-The statusline is fully customizable through the configuration system:
+### Statusline Display Options
 
-| Option                      | Description                          | Default       |
-| --------------------------- | ------------------------------------ | ------------- |
-| `show_model`                | Display AI model name                | `true`        |
-| `show_time`                 | Display current time                 | `true`        |
-| `show_session_cost`         | Display session cost                 | `true`        |
-| `show_directory`            | Display current directory            | `true`        |
-| `show_git_branch`           | Display Git branch status            | `true`        |
-| `show_balance`              | Display account balance              | `true`        |
-| `show_subscription`         | Display subscription info            | `true`        |
-| `show_session_duration`     | Display session duration             | `false`       |
-| `show_today_usage`          | Display today's usage cost           | `true`        |
-| `directory_full_path`       | Show full path vs directory name     | `true`        |
-| `layout`                    | `single_line` or `multi_line`        | `single_line` |
-| `multiplier_config.enabled` | Enable time-based multiplier display | `true`        |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `show_model` | Display AI model name | `true` |
+| `show_time` | Display current time | `true` |
+| `show_session_cost` | Display session cost | `true` |
+| `show_directory` | Display current directory | `true` |
+| `show_git_branch` | Display Git branch status | `true` |
+| `show_balance` | Display account balance | `true` |
+| `show_subscription` | Display subscription info | `true` |
+| `show_today_usage` | Display today's usage cost | `true` |
+| `layout` | `single_line` or `multi_line` | `single_line` |
 
-## 🎨 Display Information
+### Platform-Specific Display
 
-The statusline can display the following information:
+Each platform has its own display format:
 
-**Core Information:**
+- **GAC Code**: USD currency, credit-based balance
+- **DeepSeek**: RMB currency, balance_infos array structure  
+- **Kimi**: RMB currency, Moonshot API format
+- **SiliconFlow**: USD currency, standard balance format
+- **Local Proxy**: Configurable, typically mirrors target platform
 
-- **Model**: AI model name (e.g., Claude-3.5-Sonnet)
-- **Time**: Current time in HH:MM:SS format
-- **Cost**: Session cost (real: $3.75, mock: T2.45)
-- **Today**: Today's usage cost with color coding (e.g., Today:$74.47)
+## 🎨 Color Coding System
 
-**GAC API Data:**
+### Balance Status Colors
+- 🟢 **Green**: Healthy balance (sufficient funds)
+- 🟡 **Yellow**: Warning level (moderate funds)  
+- 🔴 **Red**: Critical level (low funds)
 
-- **Balance**: Current credits / Credit cap (e.g., 2692/12000)
-- **Expires**: Subscription end date with days remaining (e.g., 09-13(19d))
-
-**Development Context:**
-
-- **Dir**: Current directory (full path or name only)
-- **Git**: Current Git branch with dirty indicator (\*) if uncommitted changes
-
-### Color Coding
-
-#### GAC API Status
-- 🟢 **Green**: Sufficient balance (>1000) / Time remaining (>14 days) / Off-peak periods
-- 🟡 **Yellow**: Warning level (500-1000) / (7-14 days)
-- 🔴 **Red**: Critical level (<500) / (<7 days) / Peak periods
-
-#### Today's Usage (Gaming Equipment Rarity)
+### Today's Usage (Gaming Equipment Rarity)
 - 🔴 **Red** ($300+) - Exotic
 - 🟠 **Orange** ($200-$299) - Legendary  
 - 🟣 **Purple** ($100-$199) - Artifact
@@ -229,19 +283,7 @@ The statusline can display the following information:
 
 ## 🕒 Time-based Multipliers
 
-The statusline automatically detects and displays different cost periods with visual indicators:
-
-### Default Time Periods
-
-| Period         | Time Range    | Days          | Multiplier | Display      | Color    |
-| -------------- | ------------- | ------------- | ---------- | ------------ | -------- |
-| **Peak Hours** | 4:30-6:30 PM  | Weekdays only | 5x         | `[5X]`       | 🔴 Red   |
-| **Off-peak**   | 1:00-10:00 AM | All days      | 0.8x       | `[0.8X]`     | 🟢 Green |
-| **Normal**     | Other times   | All days      | 1x         | No indicator | Default  |
-
-### Configurable Multiplier System
-
-The multiplier system is fully configurable through `statusline-config.json`:
+The statusline supports configurable time-based multipliers for different platforms:
 
 ```json
 {
@@ -259,7 +301,7 @@ The multiplier system is fully configurable through `statusline-config.json`:
       },
       {
         "name": "off_peak",
-        "start_time": "01:00",
+        "start_time": "01:00", 
         "end_time": "10:00",
         "multiplier": 0.8,
         "display_text": "0.8X",
@@ -271,134 +313,131 @@ The multiplier system is fully configurable through `statusline-config.json`:
 }
 ```
 
-### Multiplier Configuration Options
-
-| Field           | Description                                    | Example            |
-| --------------- | ---------------------------------------------- | ------------------ |
-| `name`          | Internal identifier for the period             | `"peak_hour"`      |
-| `start_time`    | Period start time (24-hour format)             | `"16:30"`          |
-| `end_time`      | Period end time (24-hour format)               | `"18:30"`          |
-| `multiplier`    | Cost multiplier for this period                | `5` or `0.8`       |
-| `display_text`  | Text shown in statusline                       | `"5X"` or `"0.8X"` |
-| `weekdays_only` | Apply only to weekdays (Mon-Fri)               | `true` or `false`  |
-| `color`         | Display color (`red`, `green`, `yellow`, etc.) | `"red"`            |
-
-### Adding Custom Periods
-
-You can add additional time periods by extending the `periods` array:
-
-```json
-{
-  "name": "weekend_special",
-  "start_time": "20:00",
-  "end_time": "23:00",
-  "multiplier": 1.5,
-  "display_text": "1.5X",
-  "weekdays_only": false,
-  "color": "yellow"
-}
-```
-
 ## 📈 Usage Tracking
 
-The statusline integrates with `npx ccusage` to display today's total usage cost with a gaming equipment rarity color scheme.
+Integrates with `npx ccusage` for comprehensive usage tracking:
 
-### Features
+- **Automatic Updates**: Background fetching with timeout protection
+- **Lock Mechanism**: Prevents concurrent updates
+- **Color Coding**: Gaming equipment rarity system
+- **Smart Caching**: Reduces API calls
 
-- **Automatic Updates**: Background fetching via `update_usage.py` with 10-minute timeout
-- **Lock Mechanism**: Prevents multiple simultaneous updates with 30-minute cooldown
-- **Color Coding**: 10-level rarity system from Poor (grey) to Exotic (red)
-- **Smart Caching**: Usage data cached to avoid frequent API calls
-
-### Requirements
-
-- Node.js and npm installed (for npx)
-- ccusage runs with npx: `npx ccusage`
-
-### Configuration
-
-Enable/disable today's usage display in `statusline-config.json`:
-
+Enable in configuration:
 ```json
 {
   "show_today_usage": true
 }
 ```
 
-## 🔧 Advanced Configuration
+## 🔧 Advanced Features
 
-### Multi-tier Caching System
+### Session UUID Mapping
 
-The statusline uses intelligent caching:
+The system uses UUID-based session mapping for 100% accurate platform detection:
+
+1. Launcher generates UUID and registers complete platform configuration
+2. Configuration includes: platform, api_key, api_base_url, model, small_model
+3. Statusline looks up session UUID to determine active platform
+4. Displays platform-appropriate balance and subscription information
+
+### Configuration Synchronization
+
+- **Source**: `examples/launcher-config.json` (user-editable)
+- **Target**: `scripts/gaccode.com/platform-config.json` (plugin reads)
+- **Sync**: Automatic during launcher execution
+- **Mapping**: `examples/session-mappings.json` ↔ `scripts/gaccode.com/session-mappings.json`
+
+### Multi-tier Caching
 
 - **UI Refresh**: 1 second (real-time updates)
-- **Balance Cache**: 1 minute (API rate limiting)
+- **Balance Cache**: 5 minutes (API rate limiting)
+- **History Cache**: 5 minutes (multiplier detection)
 - **Subscription Cache**: 1 hour (infrequent changes)
+- **Session Cache**: Persistent until restart
 
-Modify in `statusline.py`:
-
-```python
-BALANCE_CACHE_TIMEOUT = 60      # Balance cache in seconds
-SUBSCRIPTION_CACHE_TIMEOUT = 3600  # Subscription cache in seconds
-```
-
-## 🛠️ Development
-
-### File Structure
+## 🛠️ File Structure
 
 ```
 gaccode-statusline/
-├── statusline.py           # Main statusline script
-├── config-statusline.py   # Configuration management tool
-├── set-gac-token.py       # Token management utility
-├── README.md              # This file
-├── SETUP_GUIDE.md         # Detailed setup guide
-├── LICENSE                # MIT License
-└── .gitignore            # Git ignore rules (protects sensitive files)
+├── statusline.py              # Main statusline script
+├── platform_manager.py       # Unified platform configuration manager
+├── config-statusline.py      # Display configuration tool
+├── platforms/                 # Platform-specific implementations
+│   ├── manager.py            # Platform detection manager
+│   ├── base.py              # Base platform interface
+│   ├── gaccode.py           # GAC Code implementation
+│   ├── kimi.py              # Kimi implementation
+│   ├── deepseek.py          # DeepSeek implementation
+│   └── siliconflow.py       # SiliconFlow implementation
+├── examples/                  # Launcher scripts and configuration
+│   ├── cc.mp.ps1            # Windows PowerShell launcher
+│   ├── cc.mp.sh             # Linux/Mac bash launcher
+│   ├── launcher-config.json # Platform configuration
+│   └── session-mappings.json # Session UUID mappings
+├── README.md                 # This file
+└── LICENSE                  # MIT License
 ```
 
-### Testing
+## 🧪 Testing
 
+### Test Individual Components
 ```bash
-# Test the statusline directly
+# Test statusline directly
 echo '{}' | python statusline.py
 
-# Test configuration system
-python config-statusline.py --show
+# Test platform detection
+python -c "from platforms.manager import PlatformManager; print(PlatformManager().list_supported_platforms())"
 
-# Test with different layouts
-python config-statusline.py --set layout multi_line
-echo '{}' | python statusline.py
+# Test launcher configuration
+python examples/cc.mp.ps1 --help  # Windows
+./examples/cc.mp.sh --help        # Linux/Mac
 ```
 
-### Contributing
+### Debug Session Mapping
+```bash
+# Check session mappings
+cat examples/session-mappings.json
+cat session-mappings.json
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes and test thoroughly
-4. Commit: `git commit -am 'Add some feature'`
-5. Push: `git push origin feature-name`
-6. Create a Pull Request
+# Test platform configuration sync
+python platform_manager.py list
+```
 
 ## 🔧 Troubleshooting
 
-### Statusline not showing?
+### Common Issues
 
-1. Verify you're using a Claude model (GAC API data only shows for Claude models)
-2. Check token configuration: `python set-gac-token.py show`
-3. Test API connectivity: `python statusline.py`
-4. Restart Claude Code
+**Statusline not showing platform data:**
+1. Verify API key is set: `python platform_manager.py list`
+2. Check session mapping: Look for your session UUID in `session-mappings.json`
+3. Ensure launcher was used to start Claude Code
+4. Test API connectivity: `python statusline.py`
 
-### API call failures?
+**Platform detection failures:**
+1. Verify you used the launcher script (`cc.mp.ps1` or `cc.mp.sh`)
+2. Check if session UUID exists in mapping file
+3. Ensure configuration was synced to plugin directory
+4. Restart Claude Code if configuration was updated
 
-- Ensure your token is valid and not expired
-- Check network connectivity
-- Verify GAC Code API service status
+**API call failures:**
+1. Verify API key is correct and active
+2. Check network connectivity
+3. Ensure API endpoint is accessible
+4. Review platform-specific API documentation
 
-### Display encoding issues?
+**Display encoding issues:**
+1. Ensure terminal supports UTF-8
+2. On Windows: `chcp 65001`
+3. Check Python locale settings
 
-- Ensure your terminal supports UTF-8 encoding
-- On Windows, try running: `chcp 65001`
+### Debug Mode
+
+Enable debug output in `statusline.py`:
+```python
+DEBUG = True  # Set at top of file
+```
+
+This will show detailed platform detection and API call information.
 
 ## 📄 License
 
@@ -406,10 +445,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- [GAC Code](https://gaccode.com/) for providing the API
-- [Claude Code](https://claude.ai/code) for the amazing development environment
-- [ccusage](https://github.com/ryoppippi/ccusage) by ryoppippi for the excellent usage tracking tool
-- All contributors who help improve this tool
+- [GAC Code](https://gaccode.com/) for the API service
+- [Claude Code](https://claude.ai/code) for the development environment
+- [DeepSeek](https://www.deepseek.com/) for their API
+- [Kimi (月之暗面)](https://kimi.moonshot.cn/) for their Moonshot API
+- [SiliconFlow](https://siliconflow.cn/) for their API service
+- [ccusage](https://github.com/ryoppippi/ccusage) by ryoppippi for usage tracking
+- All contributors and users who help improve this tool
 
 ## 🤝 Support
 
@@ -417,9 +459,18 @@ If you find this project helpful, please consider:
 
 - ⭐ Starring the repository
 - 🐛 Reporting issues
-- 💡 Suggesting new features
+- 💡 Suggesting new features  
 - 🔧 Contributing code improvements
+- 📝 Improving documentation
+
+## 🔮 Roadmap
+
+- [ ] Web dashboard for configuration management
+- [ ] Additional platform integrations (OpenAI, Azure, etc.)
+- [ ] Usage analytics and reporting
+- [ ] Custom alerting and notifications
+- [ ] Plugin marketplace distribution
 
 ---
 
-**Disclaimer**: This is an unofficial tool for GAC Code API integration. Not affiliated with Anthropic or GAC Code.
+**Disclaimer**: This is an unofficial tool for multi-platform API integration. Not affiliated with Anthropic, GAC Code, DeepSeek, Moonshot AI, or SiliconFlow.

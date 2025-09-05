@@ -39,7 +39,7 @@ def load_config():
         return DEFAULT_CONFIG.copy()
 
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
             config = json.load(f)
             # 合并默认配置，确保所有选项都存在
             result = DEFAULT_CONFIG.copy()
@@ -52,7 +52,7 @@ def load_config():
 def save_config(config):
     """保存配置"""
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8-sig") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
         print(f"配置已保存到: {CONFIG_FILE}")
         return True

@@ -71,10 +71,11 @@ class PlatformManager:
                     # 根据platform名称获取完整配置
                     platform_config = config_manager.get_platform_config(platform_name)
                     if platform_config and platform_config.get("enabled"):
-                        # 优先使用 auth_token，如果没有则使用 api_key
-                        platform_token = platform_config.get(
-                            "auth_token"
-                        ) or platform_config.get("api_key", token)
+                        # 根据平台类型选择正确的token字段
+                        if platform_name == "gaccode":
+                            platform_token = platform_config.get("login_token") or platform_config.get("api_key", token)
+                        else:
+                            platform_token = platform_config.get("auth_token") or platform_config.get("api_key", token)
 
                         for platform_class in self._platform_classes:
                             platform = platform_class(platform_token, config)
@@ -136,10 +137,11 @@ class PlatformManager:
             # 根据platform名称获取完整配置和token
             platform_config = config_manager.get_platform_config(platform_type)
             if platform_config and platform_config.get("enabled"):
-                # 优先使用 auth_token，如果没有则使用 api_key
-                platform_token = platform_config.get(
-                    "auth_token"
-                ) or platform_config.get("api_key", token)
+                # 根据平台类型选择正确的token字段
+                if platform_type == "gaccode":
+                    platform_token = platform_config.get("login_token") or platform_config.get("api_key", token)
+                else:
+                    platform_token = platform_config.get("auth_token") or platform_config.get("api_key", token)
                 
                 log_message(
                     "platform-manager",

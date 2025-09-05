@@ -94,8 +94,13 @@ else:
 
 # Sync configuration to plugin directory
 plugin_path = config['settings']['plugin_path']
-plugin_config_file = f'{plugin_path}/platform-config.json'
-plugin_session_file = f'{plugin_path}/session-mappings.json'
+plugin_config_file = f'{plugin_path}/data/config/platform-config.json'
+plugin_session_file = f'{plugin_path}/data/cache/session-mappings.json'
+
+# Ensure directories exist
+import os
+os.makedirs(f'{plugin_path}/data/config', exist_ok=True)
+os.makedirs(f'{plugin_path}/data/cache', exist_ok=True)
 
 print('🔄 Syncing configuration to plugin directory...')
 

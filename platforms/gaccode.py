@@ -67,9 +67,19 @@ class GACCodePlatform(BasePlatform):
             return False
         
         try:
-            cache_mtime = cache_file.stat().st_mtime
-            current_time = datetime.now().timestamp()
-            return (current_time - cache_mtime) < ttl_seconds
+            with open(cache_file, 'r', encoding='utf-8-sig') as f:
+                cache_data = json.load(f)
+            
+            # 使用内容中的时间戳而不是文件修改时间
+            cached_at_str = cache_data.get('cached_at')
+            if not cached_at_str:
+                return False
+            
+            cached_at = datetime.fromisoformat(cached_at_str)
+            current_time = datetime.now()
+            age_seconds = (current_time - cached_at).total_seconds()
+            
+            return age_seconds < ttl_seconds
         except Exception:
             return False
     
@@ -79,7 +89,7 @@ class GACCodePlatform(BasePlatform):
             return None
         
         try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
+            with open(cache_file, 'r', encoding='utf-8-sig') as f:
                 cache_data = json.load(f)
             return cache_data.get('data')
         except Exception:
@@ -99,7 +109,7 @@ class GACCodePlatform(BasePlatform):
             pass  # 缓存保存失败不影响主流程
     
     def fetch_balance_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch balance data from GAC Code API (5分钟缓存)"""
+        """Fetch balance data from GAC Code API (5分钟缓存，失败时使用过期缓存)"""
         # 检查缓存是否有效（5分钟 = 300秒）
         if self._is_cache_valid(self._balance_cache_file, 300):
             cached_data = self._load_cache_data(self._balance_cache_file)
@@ -111,11 +121,17 @@ class GACCodePlatform(BasePlatform):
         if api_data:
             # 保存到缓存（5分钟TTL）
             self._save_cache_data(self._balance_cache_file, api_data, 300)
+            return api_data
         
-        return api_data
+        # API调用失败，尝试使用过期缓存作为备选方案
+        cached_data = self._load_cache_data(self._balance_cache_file)
+        if cached_data:
+            return cached_data
+        
+        return None
     
     def fetch_subscription_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch subscription data from GAC Code API (5分钟缓存)"""
+        """Fetch subscription data from GAC Code API (5分钟缓存，失败时使用过期缓存)"""
         # 检查缓存是否有效（5分钟 = 300秒）
         if self._is_cache_valid(self._subscription_cache_file, 300):
             cached_data = self._load_cache_data(self._subscription_cache_file)
@@ -127,12 +143,14 @@ class GACCodePlatform(BasePlatform):
         if api_data:
             # 保存到缓存（5分钟TTL）
             self._save_cache_data(self._subscription_cache_file, api_data, 300)
+            return api_data
         
-        return api_data
-
-    def fetch_subscription_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch subscription data from GAC Code API"""
-        return self.make_request("/subscriptions")
+        # API调用失败，尝试使用过期缓存作为备选方案
+        cached_data = self._load_cache_data(self._subscription_cache_file)
+        if cached_data:
+            return cached_data
+        
+        return None
 
     def _ensure_cache_directories(self) -> None:
         """确保缓存目录存在"""
@@ -176,14 +194,23 @@ class GACCodePlatform(BasePlatform):
             pass  # 缓存保存失败不影响主流程
     
     def _should_update_history_cache(self) -> bool:
-        """判断是否需要更新历史缓存（5分钟轮询）"""
+        """判断是否需要更新历史缓存（5分钟轮询，基于内容时间戳）"""
         if not self._history_cache_file.exists():
             return True
         
         try:
-            cache_mtime = self._history_cache_file.stat().st_mtime
-            current_time = datetime.now().timestamp()
-            return (current_time - cache_mtime) > 300  # 5分钟
+            with open(self._history_cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            
+            cached_at_str = cache_data.get('cached_at')
+            if not cached_at_str:
+                return True
+                
+            cached_at = datetime.fromisoformat(cached_at_str)
+            current_time = datetime.now()
+            age_seconds = (current_time - cached_at).total_seconds()
+            
+            return age_seconds > 300  # 5分钟
         except Exception:
             return True
     
@@ -215,8 +242,15 @@ class GACCodePlatform(BasePlatform):
             
             # 更新倍率时间段缓存
             self._update_multiplier_segments_from_history(api_data)
+            return api_data
         
-        return api_data
+        # API调用失败，尝试使用已有缓存
+        try:
+            with open(self._history_cache_file, 'r', encoding='utf-8') as f:
+                cached_data = json.load(f)
+            return cached_data.get('data')
+        except Exception:
+            return None
     
     def _update_multiplier_segments_from_history(self, history_data: Dict[str, Any]) -> None:
         """根据历史数据更新倍率时间段缓存"""

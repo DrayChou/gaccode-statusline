@@ -71,3 +71,4 @@ session-mappings.json
 platform-config.json
 data/cache/gac-history-cache.json
 data/cache/gac-multiplier-segments.json
+data/cache/subscription-cache-gaccode.json

@@ -1,0 +1,84 @@
+{
+  "platforms": {
+    "gaccode": {
+      "name": "GAC Code",
+      "api_base_url": "https://gaccode.com/api",
+      "api_key": "",
+      "login_token": "REPLACE-WITH-YOUR-ACTUAL-GAC-LOGIN-TOKEN",
+      "model": "",
+      "small_model": "",
+      "enabled": false,
+      "_comment": "获取login_token: 1.登录gaccode.com 2.F12打开开发者工具 3.Network面板找API请求 4.复制Authorization Bearer token"
+    },
+    "kimi": {
+      "name": "Kimi (月之暗面)",
+      "api_base_url": "https://api.moonshot.cn/v1",
+      "api_key": "",
+      "auth_token": "REPLACE-WITH-YOUR-ACTUAL-KIMI-TOKEN",
+      "model": "kimi-k2-0905-preview",
+      "small_model": "kimi-k2-0905-preview",
+      "enabled": false,
+      "_comment": "获取auth_token: 访问kimi.moonshot.cn获取API密钥"
+    },
+    "deepseek": {
+      "name": "DeepSeek",
+      "api_base_url": "https://api.deepseek.com",
+      "api_key": "REPLACE-WITH-YOUR-ACTUAL-DEEPSEEK-KEY",
+      "model": "deepseek-chat",
+      "small_model": "deepseek-chat",
+      "enabled": false,
+      "_comment": "获取api_key: 访问platform.deepseek.com获取API密钥，格式: sk-xxxxx"
+    },
+    "siliconflow": {
+      "name": "SiliconFlow", 
+      "api_base_url": "https://api.siliconflow.cn/v1",
+      "api_key": "REPLACE-WITH-YOUR-ACTUAL-SILICONFLOW-KEY",
+      "model": "deepseek-ai/deepseek-v3.1",
+      "small_model": "deepseek-ai/deepseek-v3.1",
+      "enabled": false,
+      "_comment": "获取api_key: 访问siliconflow.cn获取API密钥"
+    },
+    "local_proxy": {
+      "name": "Local Proxy",
+      "api_base_url": "http://localhost:7601",
+      "api_key": "local-development-key",
+      "model": "deepseek-v3.1", 
+      "small_model": "deepseek-v3.1",
+      "enabled": false,
+      "proxy_for": "deepseek",
+      "_comment": "本地代理配置，用于开发测试"
+    }
+  },
+  "aliases": {
+    "gc": "gaccode",
+    "dp": "deepseek",
+    "ds": "deepseek", 
+    "sf": "siliconflow",
+    "lp": "local_proxy",
+    "local": "local_proxy"
+  },
+  "settings": {
+    "default_platform": "gaccode",
+    "plugin_path": "../data",
+    "_security_notice": "⚠️ 请勿将包含真实API密钥的配置文件提交到版本控制系统"
+  },
+  "_usage_instructions": {
+    "setup": [
+      "1. 复制此模板文件到launcher-config.json",
+      "2. 将所有REPLACE-WITH-YOUR-ACTUAL-*占位符替换为真实API密钥",
+      "3. 设置对应平台的enabled为true",
+      "4. 使用launcher启动: python launcher.py <platform>"
+    ],
+    "security": [
+      "推荐使用环境变量存储API密钥",
+      "配置文件中的真实密钥会被.gitignore自动排除", 
+      "定期轮换API密钥以确保安全"
+    ],
+    "platforms": {
+      "gaccode": "使用login_token字段，从浏览器开发者工具获取",
+      "kimi": "使用auth_token字段，格式通常为sk-开头",
+      "deepseek": "使用api_key字段，格式为sk-开头", 
+      "siliconflow": "使用api_key字段，从官网控制台获取"
+    }
+  }
+}

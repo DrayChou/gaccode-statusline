@@ -30,7 +30,7 @@ class PlatformManager:
     def __init__(self):
         self.project_dir = Path(__file__).parent
         self.data_dir = self.project_dir / "data"
-        self.config_file = self.data_dir / "config" / "platform-config.json"
+        self.config_file = self.data_dir / "config" / "launcher-config.json"
         self.session_file = self.data_dir / "cache" / "session-mappings.json"
 
         # 确保目录存在
@@ -129,7 +129,7 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "WARNING",
-                    "Empty or invalid configuration file, using default config"
+                    "Empty or invalid configuration file, using default config",
                 )
                 return self.get_default_config()
         except Exception as e:
@@ -148,20 +148,16 @@ class PlatformManager:
             if "settings" not in config:
                 config["settings"] = {}
             config["settings"]["last_updated"] = datetime.now().isoformat()
-            
+
             # 使用安全的文件写入（带锁定）
             success = safe_json_write(self.config_file, config)
             if success:
                 log_message(
-                    "platform-manager",
-                    "DEBUG",
-                    "Configuration saved successfully"
+                    "platform-manager", "DEBUG", "Configuration saved successfully"
                 )
             else:
                 log_message(
-                    "platform-manager",
-                    "ERROR",
-                    "Failed to write configuration file"
+                    "platform-manager", "ERROR", "Failed to write configuration file"
                 )
             return success
         except Exception as e:
@@ -185,15 +181,8 @@ class PlatformManager:
         resolved_platform = self.resolve_platform_alias(platform)
         return config.get("platforms", {}).get(resolved_platform)
 
-    def set_platform_key(self, platform: str, api_key: str) -> bool:
-        """设置平台API key（支持别名）"""
-        config = self.load_config()
-        resolved_platform = self.resolve_platform_alias(platform)
-        if resolved_platform in config["platforms"]:
-            config["platforms"][resolved_platform]["api_key"] = api_key
-            config["platforms"][resolved_platform]["enabled"] = bool(api_key)
-            return self.save_config(config)
-        return False
+    # set_platform_key method removed for security reasons
+    # Users should manually configure API keys in configuration files
 
     def get_enabled_platforms(self) -> Dict[str, Dict[str, Any]]:
         """获取启用的平台"""
@@ -231,7 +220,7 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "DEBUG",
-                    f"Cleaned old session mappings, kept {len(mappings)} recent entries"
+                    f"Cleaned old session mappings, kept {len(mappings)} recent entries",
                 )
 
             # 安全保存mappings（带锁定）
@@ -240,20 +229,20 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "DEBUG",
-                    f"Session {session_uuid} registered for platform {platform}"
+                    f"Session {session_uuid} registered for platform {platform}",
                 )
             else:
                 log_message(
                     "platform-manager",
                     "ERROR",
-                    f"Failed to register session {session_uuid}"
+                    f"Failed to register session {session_uuid}",
                 )
             return success
         except Exception as e:
             log_message(
                 "platform-manager",
                 "ERROR",
-                f"Failed to register session {session_uuid}: {e}"
+                f"Failed to register session {session_uuid}: {e}",
             )
             return False
 
@@ -265,34 +254,34 @@ class PlatformManager:
                     "platform-manager",
                     "DEBUG",
                     "Session mapping file not found",
-                    {"file": str(self.session_file)}
+                    {"file": str(self.session_file)},
                 )
                 return None
 
             # 使用安全的文件读取
             mappings = safe_json_read(self.session_file, {})
             session_config = mappings.get(session_uuid)
-            
+
             if session_config:
                 log_message(
                     "platform-manager",
                     "DEBUG",
                     f"Found session config for {session_uuid}",
-                    {"platform": session_config.get("platform")}
+                    {"platform": session_config.get("platform")},
                 )
             else:
                 log_message(
                     "platform-manager",
                     "DEBUG",
-                    f"No session config found for {session_uuid}"
+                    f"No session config found for {session_uuid}",
                 )
-            
+
             return session_config
         except Exception as e:
             log_message(
                 "platform-manager",
                 "ERROR",
-                f"Failed to get session config for {session_uuid}: {e}"
+                f"Failed to get session config for {session_uuid}: {e}",
             )
             return None
 
@@ -302,9 +291,7 @@ class PlatformManager:
             session_info_file = self.data_dir / "cache" / "session-info-cache.json"
             if not session_info_file.exists():
                 log_message(
-                    "platform-manager",
-                    "DEBUG",
-                    "Session info cache file not found"
+                    "platform-manager", "DEBUG", "Session info cache file not found"
                 )
                 return None
 
@@ -316,20 +303,16 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "DEBUG",
-                    f"Found current session ID: {session_id}"
+                    f"Found current session ID: {session_id}",
                 )
                 return self.get_session_config(session_id)
             else:
-                log_message(
-                    "platform-manager",
-                    "DEBUG",
-                    "No session ID in cache file"
-                )
+                log_message("platform-manager", "DEBUG", "No session ID in cache file")
         except Exception as e:
             log_message(
                 "platform-manager",
                 "ERROR",
-                f"Failed to get current session config: {e}"
+                f"Failed to get current session config: {e}",
             )
 
         return None
@@ -354,14 +337,12 @@ class PlatformManager:
                     log_message(
                         "platform-manager",
                         "INFO",
-                        "Migrating old token file to new config system"
+                        "Migrating old token file to new config system",
                     )
                     return self.set_platform_key("gaccode", old_token)
             except Exception as e:
                 log_message(
-                    "platform-manager",
-                    "ERROR",
-                    f"Failed to migrate old token: {e}"
+                    "platform-manager", "ERROR", f"Failed to migrate old token: {e}"
                 )
         return False
 
@@ -405,17 +386,12 @@ if __name__ == "__main__":
 
     if command == "list":
         manager.list_platforms()
-    elif command == "set-key" and len(sys.argv) == 4:
-        platform, key = sys.argv[2], sys.argv[3]
-        if manager.set_platform_key(platform, key):
-            print(f"[OK] API key set for {platform}")
-        else:
-            print(f"[FAIL] Failed to set API key for {platform}")
     elif command == "get-key" and len(sys.argv) == 3:
         platform = sys.argv[2]
         key = get_platform_token(platform)
         print(f"{platform}: {key if key else 'Not set'}")
     else:
+        print("Usage: python platform_manager.py [list|get-key <platform>]")
         print(
-            "Usage: python platform_manager.py [list|set-key <platform> <key>|get-key <platform>]"
+            "Note: For security reasons, use manual configuration instead of set-key command"
         )

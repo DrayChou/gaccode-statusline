@@ -1,10 +1,36 @@
-# 敏感文件和个人数据
+# 敏感文件和个人数据（API密钥、令牌等）
 api-token.txt
-statusline-cache.json
+*.key
+*.token
+*.secret
+*.credentials
+
+# 配置文件（包含API密钥）
 statusline-config.json
+platform-config.json
+data/config/platform-config.json
+data/config/launcher-config.json
+
+# 会话和缓存文件
 session-info-cache.json
 usage-cache.json
+data/cache/session-info-cache.json
+data/cache/balance-cache-*.json
+data/cache/subscription-cache-*.json
+data/cache/gac-history-cache.json
+data/cache/gac-multiplier-segments.json
+
+# 会话映射文件（可能包含敏感配置）
+session-mappings.json
+data/cache/session-mappings.json
+
+# 会话状态文件
+.session-state.json
+examples/.session-state.json
+
+# 文件锁
 *.lock
+data/cache/*.lock
 
 # 调试和测试文件
 debug-*.py
@@ -49,9 +75,18 @@ MANIFEST
 ehthumbs.db
 Thumbs.db
 
-# 日志文件
+# 日志文件（可能包含调试信息）
 *.log
 logs/
+data/logs/
+*.debug
+*.trace
+
+# 调试和测试文件
+debug-*.py
+test-*.py
+*_test.py
+test_*.py
 
 # 临时文件
 *.tmp
@@ -60,15 +95,24 @@ logs/
 *.backup
 *.old
 
-# 
+# Claude Code相关文件
 .lh/
 .claude/
-CLAUDE.md
-data/cache/balance-cache-*.json
-data/cache/session-mappings.json
-data/config/platform-config.json
-session-mappings.json
-platform-config.json
-data/cache/gac-history-cache.json
-data/cache/gac-multiplier-segments.json
-data/cache/subscription-cache-gaccode.json
+
+# 项目特定的排除文件
+launcher-config.json
+statusline-cache.json
+
+# 备份文件
+*.backup
+*.bak
+*.old
+*.orig
+*.rej
+*.user
+*-backup.*
+
+# 环境配置
+.env
+.env.local
+.env.*.local

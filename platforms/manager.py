@@ -18,6 +18,7 @@ try:
     # Try absolute import first
     from platform_manager import PlatformManager as ConfigManager
     from data.logger import log_message, log_platform_detection, log_error
+    from data.session_manager import SessionManager, detect_platform_from_session_id
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,6 +26,7 @@ except ImportError:
 
     sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
     from logger import log_message, log_platform_detection, log_error
+    from session_manager import SessionManager, detect_platform_from_session_id
 
 
 class PlatformManager:
@@ -42,97 +44,101 @@ class PlatformManager:
     def detect_platform(
         self, session_info: Dict[str, Any], token: str, config: Dict[str, Any]
     ) -> Optional[BasePlatform]:
-        """Simplified platform detection using session mapping"""
+        """优化的平台检测，优先使用Session ID前缀检测"""
 
-        # 优先级1 - Session UUID映射检测（最高置信度）
-        try:
-            # 从session_info中获取session_id，而不是从文件读取
-            session_id = session_info.get("session_id")
-            log_message(
-                "platform-manager",
-                "DEBUG",
-                "Starting platform detection",
-                {"session_id": session_id},
-            )
+        # 获取session_id
+        session_id = session_info.get("session_id")
+        log_message(
+            "platform-manager",
+            "DEBUG",
+            "Starting optimized platform detection",
+            {"session_id": session_id},
+        )
 
-            if session_id:
-                config_manager = ConfigManager()
-                session_config = config_manager.get_session_config(session_id)
+        # 优先级0 - Session Mapping查询（处理标准UUID）
+        if session_id:
+            # 先查询session-mappings.json文件
+            try:
+                from pathlib import Path
+                import json
 
-                if session_config:
-                    platform_name = session_config["platform"]
-                    log_message(
-                        "platform-manager",
-                        "DEBUG",
-                        "Found session mapping",
-                        {"session_id": session_id, "platform_name": platform_name},
-                    )
+                script_dir = Path(__file__).parent
+                mapping_file = (
+                    script_dir.parent / "data" / "cache" / "session-mappings.json"
+                )
 
-                    # 根据platform名称获取完整配置
-                    platform_config = config_manager.get_platform_config(platform_name)
-                    if platform_config and platform_config.get("enabled"):
-                        # 根据平台类型选择正确的token字段
-                        if platform_name == "gaccode":
-                            platform_token = platform_config.get("login_token") or platform_config.get("api_key", token)
-                        else:
-                            platform_token = platform_config.get("auth_token") or platform_config.get("api_key", token)
+                if mapping_file.exists():
+                    try:
+                        with open(mapping_file, "r", encoding="utf-8-sig") as f:
+                            mappings = json.load(f)
 
-                        for platform_class in self._platform_classes:
-                            try:
-                                platform = platform_class(platform_token, config)
-                                if platform.name.lower() == platform_name:
-                                    log_platform_detection(
-                                        session_id,
-                                        platform.name,
-                                        1.0,
-                                        "UUID_session_mapping",
-                                    )
-                                    log_message(
-                                        "platform-manager",
-                                        "INFO",
-                                        f"Platform instance created successfully",
-                                        {
-                                            "session_id": session_id,
-                                            "platform_name": platform.name,
-                                            "token_length": len(platform_token) if platform_token else 0,
-                                            "token_prefix": platform_token[:10] + "..." if platform_token and len(platform_token) > 10 else platform_token,
-                                            "platform_class": platform_class.__name__
-                                        }
-                                    )
-                                    return platform
-                                else:
-                                    # 关闭不匹配的平台实例
-                                    platform.close()
-                            except Exception as e:
+                        if session_id in mappings:
+                            mapping_info = mappings[session_id]
+                            detected_platform_name = mapping_info.get("platform")
+
+                            if detected_platform_name:
                                 log_message(
                                     "platform-manager",
-                                    "ERROR",
-                                    f"Failed to create platform instance: {platform_class.__name__}",
-                                    {"error": str(e)}
+                                    "INFO",
+                                    f"Platform detected from session mapping: {detected_platform_name}",
+                                    {
+                                        "session_id": session_id,
+                                        "detected_platform": detected_platform_name,
+                                        "mapping_type": "session_mappings",
+                                    },
                                 )
-                    else:
+
+                                # 获取平台配置并创建实例
+                                platform_instance = self._create_platform_instance(
+                                    detected_platform_name, token, config, session_id
+                                )
+                                if platform_instance:
+                                    return platform_instance
+                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
                         log_message(
                             "platform-manager",
                             "WARNING",
-                            "Platform not enabled in config",
-                            {
-                                "platform_name": platform_name,
-                                "enabled": (
-                                    platform_config.get("enabled")
-                                    if platform_config
-                                    else None
-                                ),
-                            },
+                            f"Failed to parse session mappings: {e}",
                         )
+            except Exception as e:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"Session mapping lookup failed: {e}",
+                )
+
+        # 优先级1 - Session ID前缀检测（最快，O(1)复杂度）
+        if session_id:
+            detected_platform_name = detect_platform_from_session_id(session_id)
+            if detected_platform_name:
+                log_message(
+                    "platform-manager",
+                    "INFO",
+                    f"Platform detected from session ID prefix: {detected_platform_name}",
+                    {
+                        "session_id": session_id,
+                        "detected_platform": detected_platform_name,
+                    },
+                )
+
+                # 获取平台配置并创建实例
+                platform_instance = self._create_platform_instance(
+                    detected_platform_name, token, config, session_id
+                )
+                if platform_instance:
+                    log_platform_detection(
+                        session_id,
+                        platform_instance.name,
+                        1.0,  # 最高置信度
+                        "session_id_prefix",
+                    )
+                    return platform_instance
                 else:
                     log_message(
                         "platform-manager",
-                        "DEBUG",
-                        "No session mapping found",
-                        {"session_id": session_id},
+                        "WARNING",
+                        f"Failed to create platform instance for {detected_platform_name}",
                     )
-        except Exception as e:
-            log_error("platform-manager", e, "UUID detection failed")
 
         # 优先级2 - 配置文件显式指定
         config_manager = ConfigManager()
@@ -144,73 +150,30 @@ class PlatformManager:
                 "Trying platform detection by config platform_type",
                 {"platform_type": platform_type},
             )
-            
-            # 根据platform名称获取完整配置和token
-            platform_config = config_manager.get_platform_config(platform_type)
-            if platform_config and platform_config.get("enabled"):
-                # 根据平台类型选择正确的token字段
-                if platform_type == "gaccode":
-                    platform_token = platform_config.get("login_token") or platform_config.get("api_key", token)
-                else:
-                    platform_token = platform_config.get("auth_token") or platform_config.get("api_key", token)
-                
-                log_message(
-                    "platform-manager",
-                    "DEBUG",
-                    "Found platform config, using token from config",
-                    {
-                        "platform_type": platform_type,
-                        "token_length": len(platform_token) if platform_token else 0,
-                        "token_prefix": platform_token[:10] + "..." if platform_token and len(platform_token) > 10 else platform_token,
-                        "has_auth_token": bool(platform_config.get("auth_token")),
-                        "has_api_key": bool(platform_config.get("api_key"))
-                    }
-                )
-                
-                for platform_class in self._platform_classes:
-                    try:
-                        platform = platform_class(platform_token, config)
-                        if platform.name.lower() == platform_type:
-                            log_platform_detection(
-                                session_id,
-                                platform.name,
-                                0.9,
-                                "config_platform_type",
-                            )
-                            return platform
-                        else:
-                            # 关闭不匹配的平台实例
-                            platform.close()
-                    except Exception as e:
-                        log_message(
-                            "platform-manager",
-                            "ERROR",
-                            f"Failed to create platform instance: {platform_class.__name__}",
-                            {"error": str(e)}
-                        )
-            else:
-                log_message(
-                    "platform-manager",
-                    "WARNING",
-                    "Platform config not found or not enabled",
-                    {
-                        "platform_type": platform_type,
-                        "has_config": bool(platform_config),
-                        "enabled": platform_config.get("enabled") if platform_config else None
-                    }
-                )
 
-        # 优先级3 - 传统session信息和token格式检测（带配置文件token获取）
+            platform_instance = self._create_platform_instance(
+                platform_type, token, config, session_id
+            )
+            if platform_instance:
+                log_platform_detection(
+                    session_id,
+                    platform_instance.name,
+                    0.9,
+                    "config_platform_type",
+                )
+                return platform_instance
+
+        # 优先级3 - 传统token格式检测
         log_message(
             "platform-manager",
             "DEBUG",
             "Trying traditional platform detection with token format analysis",
         )
-        
+
         for platform_class in self._platform_classes:
             platform = None
             platform_with_token = None
-            
+
             try:
                 # 先尝试用当前token检测
                 platform = platform_class(token, config)
@@ -222,55 +185,43 @@ class PlatformManager:
                         "traditional_detection",
                     )
                     return platform
-                    
+
                 # 如果当前token为null，尝试从配置文件获取该平台的token
                 if not token:
                     platform_name = platform.name.lower()
                     platform_config = config_manager.get_platform_config(platform_name)
                     if platform_config and platform_config.get("enabled"):
-                        # 优先使用 auth_token，如果没有则使用 api_key
                         platform_token = platform_config.get(
                             "auth_token"
                         ) or platform_config.get("api_key")
-                        
+
                         if platform_token:
-                            log_message(
-                                "platform-manager",
-                                "DEBUG",
-                                f"Trying {platform_name} detection with config token",
-                                {
-                                    "token_length": len(platform_token),
-                                    "token_prefix": platform_token[:10] + "..."
-                                }
-                            )
-                            
-                            # 用配置文件的token重新创建平台实例并检测
                             platform_with_token = platform_class(platform_token, config)
-                            if platform_with_token.detect_platform(session_info, platform_token):
+                            if platform_with_token.detect_platform(
+                                session_info, platform_token
+                            ):
                                 log_platform_detection(
                                     session_id,
                                     platform_with_token.name,
                                     0.7,
                                     "traditional_with_config_token",
                                 )
-                                # 关闭第一个平台实例，返回第二个
                                 if platform:
                                     platform.close()
                                 return platform_with_token
                             else:
-                                # 关闭第二个平台实例
                                 platform_with_token.close()
-                
+
                 # 关闭不匹配的平台实例
                 if platform:
                     platform.close()
-                    
+
             except Exception as e:
                 log_message(
                     "platform-manager",
                     "ERROR",
                     f"Error during platform detection: {platform_class.__name__}",
-                    {"error": str(e)}
+                    {"error": str(e)},
                 )
                 # 清理资源
                 if platform:
@@ -278,7 +229,113 @@ class PlatformManager:
                 if platform_with_token:
                     platform_with_token.close()
 
+        # 优先级4 - 如果所有检测都失败，默认使用GAC Code平台
+        log_message(
+            "platform-manager",
+            "INFO",
+            "No platform detected, falling back to default GAC Code platform",
+            {"session_id": session_id},
+        )
+
+        default_platform = self._create_platform_instance(
+            "gaccode", token, config, session_id
+        )
+        if default_platform:
+            log_platform_detection(
+                session_id,
+                default_platform.name,
+                0.5,  # 较低置信度，因为是默认选择
+                "default_fallback",
+            )
+            return default_platform
+
         return None
+
+    def _create_platform_instance(
+        self, platform_name: str, token: str, config: Dict[str, Any], session_id: str
+    ) -> Optional[BasePlatform]:
+        """
+        根据平台名称创建平台实例
+
+        Args:
+            platform_name: 平台名称
+            token: API token
+            config: 配置信息
+            session_id: Session ID
+
+        Returns:
+            平台实例或None
+        """
+        try:
+            config_manager = ConfigManager()
+            platform_config = config_manager.get_platform_config(platform_name)
+
+            if not platform_config or not platform_config.get("enabled"):
+                log_message(
+                    "platform-manager",
+                    "WARNING",
+                    f"Platform {platform_name} not enabled or not configured",
+                )
+                return None
+
+            # 根据平台类型选择正确的token字段
+            if platform_name == "gaccode":
+                platform_token = platform_config.get(
+                    "login_token"
+                ) or platform_config.get("api_key", token)
+            else:
+                platform_token = platform_config.get(
+                    "auth_token"
+                ) or platform_config.get("api_key", token)
+
+            # 查找匹配的平台类
+            for platform_class in self._platform_classes:
+                try:
+                    # 传递平台特定配置给平台实例
+                    platform_specific_config = {**config, **platform_config}
+                    temp_instance = platform_class(
+                        platform_token, platform_specific_config
+                    )
+                    if temp_instance.name.lower() == platform_name:
+                        log_message(
+                            "platform-manager",
+                            "INFO",
+                            f"Created platform instance for {platform_name}",
+                            {
+                                "session_id": session_id,
+                                "platform_name": platform_name,
+                                "token_length": (
+                                    len(platform_token) if platform_token else 0
+                                ),
+                                "platform_class": platform_class.__name__,
+                            },
+                        )
+                        return temp_instance
+                    else:
+                        # 关闭不匹配的实例
+                        temp_instance.close()
+                except Exception as e:
+                    log_message(
+                        "platform-manager",
+                        "ERROR",
+                        f"Failed to create {platform_class.__name__} instance: {e}",
+                    )
+
+            log_message(
+                "platform-manager",
+                "WARNING",
+                f"No platform class found for {platform_name}",
+            )
+            return None
+
+        except Exception as e:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                f"Error creating platform instance for {platform_name}: {e}",
+                {"session_id": session_id},
+            )
+            return None
 
     def get_platform_by_name(
         self, name: str, token: str, config: Dict[str, Any]
@@ -296,7 +353,7 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "ERROR",
-                    f"Failed to create platform {platform_class.__name__}: {e}"
+                    f"Failed to create platform {platform_class.__name__}: {e}",
                 )
         return None
 
@@ -313,6 +370,6 @@ class PlatformManager:
                 log_message(
                     "platform-manager",
                     "WARNING",
-                    f"Failed to get platform name for {cls.__name__}: {e}"
+                    f"Failed to get platform name for {cls.__name__}: {e}",
                 )
         return platforms

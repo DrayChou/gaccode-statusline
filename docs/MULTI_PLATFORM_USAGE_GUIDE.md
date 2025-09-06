@@ -2,17 +2,32 @@
 
 ## 🌟 概述
 
-多平台 Claude 启动器是一个完整的解决方案，支持在单一环境中无缝切换和管理多个 AI 平台（GAC Code、Kimi、DeepSeek、SiliconFlow 等）。通过统一的配置管理和 UUID session 映射，实现**100%准确率**的平台识别。
+多平台 Claude 启动器是一个完整的解决方案，支持在单一环境中无缝切换和管理多个 AI 平台（GAC Code、Kimi、DeepSeek、SiliconFlow 等）。通过优化的2位十六进制UUID前缀系统和会话映射机制，实现**O(1)复杂度**的瞬时平台识别。
+
+## 🚀 v2.0 架构升级
+
+### UUID系统优化
+- **旧系统**: 8位数字前缀 (`00000001-xxxx-...`)
+- **新系统**: 2位十六进制前缀 (`01xxxxxx-xxxx-...`)
+- **优势**: 75%空间节省，O(1)检测速度，完全UUID兼容
+
+### 平台检测优化
+1. **Priority 0**: Session Mappings查询（处理标准UUID）
+2. **Priority 1**: UUID前缀检测（瞬时识别，O(1)复杂度）
+3. **Priority 2**: 配置文件指定
+4. **Priority 3**: Token格式分析
+5. **Priority 4**: 默认GAC Code平台
 
 ## ✨ 主要特性
 
 - 🔄 **多平台支持**：GAC Code、Kimi、DeepSeek、SiliconFlow + 自定义代理
-- 🎯 **100%准确率**：基于 UUID session 映射的精确平台识别
+- ⚡ **O(1)平台检测**：基于2位十六进制UUID前缀的瞬时平台识别
 - 📋 **统一配置**：JSON 配置文件管理所有平台的 API keys 和设置
 - 🚀 **零干扰**：完全兼容 Claude Code 原生功能
 - 📊 **实时状态栏**：自动显示对应平台的余额和订阅信息
-- 🔐 **安全管理**：本地加密存储 API keys
-- 🛠️ **易于使用**：命令行参数快速切换平台
+- 🔐 **安全增强**：敏感信息屏蔽、环境变量支持、.gitignore保护
+- 🛠️ **跨平台支持**：统一Python启动器 + 轻量平台包装器
+- 🔄 **会话管理**：支持会话继续、状态保存和恢复
 
 ## 📦 安装步骤
 
@@ -22,7 +37,7 @@
 
 ```
 gaccode.com/
-├── multi_platform_config.py          # 多平台配置管理器
+├── platform_manager.py               # 统一平台配置管理器
 ├── platforms/
 │   ├── uuid_session_mapper.py        # UUID session映射系统
 │   ├── manager.py                     # 增强的平台管理器
@@ -39,97 +54,134 @@ gaccode.com/
 Copy-Item "examples\cc.multi-platform.ps1" "C:\Users\dray\scoop\shims\cc.multi-platform.ps1"
 ```
 
-### 3. 配置 API Keys
+### 3. 安全配置 API Keys
 
-使用配置管理工具设置各平台的 API keys：
+**推荐方式1：环境变量**（最安全）
+```bash
+# 设置环境变量
+export DEEPSEEK_API_KEY="sk-your-actual-deepseek-key"
+export KIMI_API_KEY="sk-your-actual-kimi-key" 
+export GAC_LOGIN_TOKEN="your-actual-gac-token"
+export SILICONFLOW_API_KEY="sk-your-actual-sf-key"
 
-```powershell
-# 设置GAC Code API key
-python multi_platform_config.py set-key gaccode "your-gac-api-key"
+# 环境变量会自动被检测，无需手动配置
+# 验证环境变量被正确识别
+python platform_manager.py list
 
-# 设置Kimi API key
-python multi_platform_config.py set-key kimi "sk-your-kimi-key"
-
-# 设置DeepSeek API key
-python multi_platform_config.py set-key deepseek "your-deepseek-key"
-
-# 设置SiliconFlow API key
-python multi_platform_config.py set-key siliconflow "your-siliconflow-key"
+# 安全提醒：不在命令行中直接传递API密钥
 ```
 
-## 🎮 使用方法
+**方式2：配置文件**（推荐）
+```bash
+# 直接编辑 examples/launcher-config.json 文件
+# 在 platforms 节下的对应平台配置 API 密钥
+
+# 验证配置（敏感信息会被屏蔽）
+python platform_manager.py list
+
+# 安全提醒：直接编辑配置文件避免在shell历史中暴露密钥
+```
+
+## 🎮 使用方法 (v2.0 统一启动器)
 
 ### 基本使用
 
 #### 1. 使用默认平台启动
 
-```powershell
-.\cc.multi-platform.ps1
+```bash
+# 使用统一Python启动器
+python examples/launcher.py
+
+# 使用包装器脚本
+./examples/cc.mp.ps1    # Windows PowerShell
+./examples/cc.mp.sh     # Linux/Mac Bash
+examples\cc.mp.bat      # Windows CMD
 ```
 
-#### 2. 指定平台启动
+#### 2. 指定平台启动 (支持别名)
 
-```powershell
+```bash
 # 使用DeepSeek平台
-.\cc.multi-platform.ps1 -Platform deepseek
+python examples/launcher.py dp           # 使用别名
+python examples/launcher.py deepseek     # 使用全名
 
 # 使用Kimi平台
-.\cc.multi-platform.ps1 -Platform kimi
+python examples/launcher.py kimi
 
 # 使用GAC Code平台
-.\cc.multi-platform.ps1 -Platform gaccode
+python examples/launcher.py gc           # 使用别名
+python examples/launcher.py gaccode      # 使用全名
+
+# 使用SiliconFlow平台
+python examples/launcher.py sf           # 使用别名
 ```
 
-#### 3. 传递额外参数
+#### 3. 会话管理和额外参数
 
-```powershell
-# 使用Kimi平台并启用MCP
-.\cc.multi-platform.ps1 -Platform kimi --mcp
+```bash
+# 继续上次会话
+python examples/launcher.py dp --continue
 
-# 使用DeepSeek平台并传递prompt
-.\cc.multi-platform.ps1 -Platform deepseek --prompt "Hello World"
+# 干运行模式（测试配置）
+python examples/launcher.py kimi --dry-run
+
+# 调试模式
+python examples/launcher.py gc --debug
+
+# 使用包装器脚本
+./examples/cc.mp.ps1 dp --continue        # PowerShell
+./examples/cc.mp.sh kimi --dry-run        # Bash
+examples\cc.mp.bat gc --debug            # CMD
 ```
 
 ### 高级使用
 
-#### 1. 查看所有平台状态
+#### 1. 查看所有平台状态（安全输出）
 
-```powershell
-python multi_platform_config.py list
+```bash
+# 查看所有平台配置状态
+python platform_manager.py list
+
+# 查看支持的平台列表
+python -c "from platforms.manager import PlatformManager; print(PlatformManager().list_supported_platforms())"
 ```
 
 输出示例：
 
 ```
-✓ gaccode: GAC Code
+✅ GAC Code: Enabled (Key: ***-TOKEN-MASKED)
    URL: https://gaccode.com/api
    Model: claude-3-5-sonnet-20241022
-   API Key: Set
+   UUID Prefix: 01
 
-✓ deepseek: DeepSeek
+✅ DeepSeek: Enabled (Key: sk-***-MASKED)
    URL: https://api.deepseek.com
    Model: deepseek-chat
-   API Key: Set
+   UUID Prefix: 02
 
-✗ kimi: Kimi (月之暗面)
+❌ Kimi: Disabled (Key: REPLACE-WITH-YOUR-ACTUAL-TOKEN)
    URL: https://api.moonshot.cn/v1
    Model: moonshot-v1-8k
-   API Key: Not set
+   UUID Prefix: 03
+
+🔧 Local Proxy: Enabled (Development mode)
+   URL: http://localhost:7601
+   Model: deepseek-v3.1
+   UUID Prefix: 05
 ```
 
-#### 2. 管理 API Keys
+#### 2. 管理 API Keys (安全增强)
 
-```powershell
-# 查看某个平台的API key
-python multi_platform_config.py get-key deepseek
+```bash
+# 查看某个平台的API key状态（屏蔽敏感信息）
+python platform_manager.py get-key deepseek
 
-# 更新API key
-python multi_platform_config.py set-key kimi "sk-new-kimi-key"
+# 注意：为了安全，API key应通过配置文件手动设置
 ```
 
 #### 3. 自定义代理配置
 
-编辑 `multi-platform-config.json`，添加自定义代理：
+编辑 `multi-launcher-config.json`，添加自定义代理：
 
 ```json
 {
@@ -154,7 +206,7 @@ python multi_platform_config.py set-key kimi "sk-new-kimi-key"
 
 ## 📊 配置文件结构
 
-### multi-platform-config.json
+### multi-launcher-config.json
 
 ```json
 {
@@ -257,8 +309,8 @@ StatusLine 按以下优先级检测平台：
 如果你使用本地代理（如你的 localhost:7601）：
 
 ```powershell
-# 配置代理平台
-python multi_platform_config.py set-key custom_proxy "your-proxy-token"
+# 配置代理平台（手动编辑配置文件）
+# 编辑 data/config/launcher-config.json
 
 # 使用代理启动
 .\cc.multi-platform.ps1 -Platform custom_proxy
@@ -313,10 +365,9 @@ print(f'Cleaned: {m.cleanup_old_sessions(10)}')
 
 ```powershell
 # 检查配置
-python multi_platform_config.py list
+python platform_manager.py list
 
-# 重新设置API key
-python multi_platform_config.py set-key <platform> "<your-key>"
+# 注意：为了安全，请手动编辑配置文件设置API key
 ```
 
 ### 3. 环境变量冲突
@@ -354,7 +405,7 @@ print(f'Cleaned {cleaned} old sessions')
 
 - 禁用不使用的平台：设置 `"enabled": false`
 - 调整缓存时间：修改 `cache_ttl_seconds`
-- 定期备份配置：`copy multi-platform-config.json multi-platform-config.backup.json`
+- 定期备份配置：`copy multi-launcher-config.json multi-platform-config.backup.json`
 
 ## 🎉 总结
 

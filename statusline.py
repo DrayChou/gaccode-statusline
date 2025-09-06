@@ -15,14 +15,16 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from platforms.manager import PlatformManager
 
-# Import logger system
+# Import logger system and file lock utility
 try:
     # Try absolute import first (for Pylance/static analysis)
     from data.logger import log_message
+    from data.file_lock import safe_json_write, safe_json_read
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent / "data"))
     from logger import log_message
+    from file_lock import safe_json_write, safe_json_read
 
 # 设置控制台编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -86,16 +88,22 @@ DEFAULT_CONFIG = {
 def load_config():
     """加载显示配置"""
     if not CONFIG_FILE.exists():
+        log_message("statusline", "DEBUG", "Config file not found, using default config", {"file": str(CONFIG_FILE)})
         return DEFAULT_CONFIG
 
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
+        config = safe_json_read(CONFIG_FILE, DEFAULT_CONFIG)
+        if config:
             # 合并默认配置，确保所有选项都存在
             result = DEFAULT_CONFIG.copy()
             result.update(config)
+            log_message("statusline", "DEBUG", "Config loaded successfully")
             return result
-    except Exception:
+        else:
+            log_message("statusline", "WARNING", "Config file empty or invalid, using defaults")
+            return DEFAULT_CONFIG
+    except Exception as e:
+        log_message("statusline", "ERROR", f"Failed to load config: {e}", {"file": str(CONFIG_FILE)})
         return DEFAULT_CONFIG
 
 
@@ -105,22 +113,41 @@ def load_config():
 def get_session_info():
     """获取Claude Code传入的session信息"""
     try:
-        session_data = json.loads(sys.stdin.read())
+        stdin_content = sys.stdin.read()
+        if not stdin_content.strip():
+            log_message("statusline", "WARNING", "Empty stdin content")
+            return {}
+        
+        session_data = json.loads(stdin_content)
+        log_message("statusline", "DEBUG", "Session info parsed successfully", {
+            "has_session_id": bool(session_data.get("session_id")),
+            "has_model": bool(session_data.get("model")),
+            "has_workspace": bool(session_data.get("workspace"))
+        })
+        
         # 缓存session信息到本地文件
         cache_session_info(session_data)
         return session_data
-    except:
+    except json.JSONDecodeError as e:
+        log_message("statusline", "ERROR", f"JSON decode error in session info: {e}")
+        return {}
+    except Exception as e:
+        log_message("statusline", "ERROR", f"Failed to get session info: {e}")
         return {}
 
 
 def cache_session_info(session_data):
-    """缓存session信息到本地文件"""
+    """缓存session信息到本地文件（带文件锁定）"""
     try:
-        with open(SESSION_INFO_FILE, "w", encoding="utf-8-sig") as f:
-            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        # 使用安全的文件写入（带锁定）
+        success = safe_json_write(SESSION_INFO_FILE, session_data)
+        if success:
+            log_message("statusline", "DEBUG", "Session info cached successfully")
+        else:
+            log_message("statusline", "WARNING", "Failed to cache session info")
     except Exception as e:
-        # 缓存失败不影响主要功能，静默处理
-        pass
+        # 缓存失败不影响主要功能，记录日志但不抛出异常
+        log_message("statusline", "ERROR", f"Session cache error: {e}")
 
 
 def is_claude_model(session_info):
@@ -359,29 +386,43 @@ def get_today_usage():
 def load_cache():
     """加载缓存数据"""
     if not CACHE_FILE.exists():
+        log_message("statusline", "DEBUG", "Cache file not found", {"file": str(CACHE_FILE)})
         return {"balance": None, "subscriptions": None}
 
     try:
-        with open(CACHE_FILE, "r", encoding="utf-8-sig") as f:
-            cache = json.load(f)
+        cache = safe_json_read(CACHE_FILE, {})
+        if not cache:
+            log_message("statusline", "DEBUG", "Empty cache file")
+            return {"balance": None, "subscriptions": None}
 
         result = {"balance": None, "subscriptions": None}
         current_time = datetime.now()
 
         # 检查余额缓存
         if cache.get("balance_timestamp"):
-            balance_time = datetime.fromisoformat(cache["balance_timestamp"])
-            if (current_time - balance_time).total_seconds() <= BALANCE_CACHE_TIMEOUT:
-                result["balance"] = cache.get("balance_data")
+            try:
+                balance_time = datetime.fromisoformat(cache["balance_timestamp"])
+                cache_age = (current_time - balance_time).total_seconds()
+                if cache_age <= BALANCE_CACHE_TIMEOUT:
+                    result["balance"] = cache.get("balance_data")
+                    log_message("statusline", "DEBUG", f"Using balance cache, age: {cache_age:.1f}s")
+            except ValueError as e:
+                log_message("statusline", "WARNING", f"Invalid balance timestamp: {e}")
 
         # 检查订阅缓存
         if cache.get("subscription_timestamp"):
-            sub_time = datetime.fromisoformat(cache["subscription_timestamp"])
-            if (current_time - sub_time).total_seconds() <= SUBSCRIPTION_CACHE_TIMEOUT:
-                result["subscriptions"] = cache.get("subscription_data")
+            try:
+                sub_time = datetime.fromisoformat(cache["subscription_timestamp"])
+                cache_age = (current_time - sub_time).total_seconds()
+                if cache_age <= SUBSCRIPTION_CACHE_TIMEOUT:
+                    result["subscriptions"] = cache.get("subscription_data")
+                    log_message("statusline", "DEBUG", f"Using subscription cache, age: {cache_age:.1f}s")
+            except ValueError as e:
+                log_message("statusline", "WARNING", f"Invalid subscription timestamp: {e}")
 
         return result
-    except Exception:
+    except Exception as e:
+        log_message("statusline", "ERROR", f"Failed to load cache: {e}")
         return {"balance": None, "subscriptions": None}
 
 
@@ -394,14 +435,15 @@ def load_platform_config():
         return {}
     
     try:
-        with open(platform_config_file, "r", encoding="utf-8-sig") as f:
-            config_data = json.load(f)
-            
-        log_message("statusline", "DEBUG", "Platform config loaded successfully", {
-            "platforms_count": len(config_data.get("platforms", {})),
-            "has_aliases": bool(config_data.get("aliases")),
-            "has_settings": bool(config_data.get("settings"))
-        })
+        config_data = safe_json_read(platform_config_file, {})
+        if config_data:
+            log_message("statusline", "DEBUG", "Platform config loaded successfully", {
+                "platforms_count": len(config_data.get("platforms", {})),
+                "has_aliases": bool(config_data.get("aliases")),
+                "has_settings": bool(config_data.get("settings"))
+            })
+        else:
+            log_message("statusline", "WARNING", "Platform config file empty or invalid")
         
         return config_data
     except Exception as e:
@@ -414,29 +456,43 @@ def load_platform_cache(platform_name):
     platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
 
     if not platform_cache_file.exists():
+        log_message("statusline", "DEBUG", f"No cache file for {platform_name}", {"file": str(platform_cache_file)})
         return {"balance": None, "subscriptions": None}
 
     try:
-        with open(platform_cache_file, "r", encoding="utf-8-sig") as f:
-            cache = json.load(f)
+        cache = safe_json_read(platform_cache_file, {})
+        if not cache:
+            log_message("statusline", "DEBUG", f"Empty cache file for {platform_name}")
+            return {"balance": None, "subscriptions": None}
 
         result = {"balance": None, "subscriptions": None}
         current_time = datetime.now()
 
         # 检查余额缓存（5分钟 = 300秒）
         if cache.get("balance_timestamp"):
-            balance_time = datetime.fromisoformat(cache["balance_timestamp"])
-            cache_age = (current_time - balance_time).total_seconds()
-            if cache_age <= 300:  # 5分钟缓存
-                result["balance"] = cache.get("balance_data")
-                log_message("statusline", "DEBUG", f"Using {platform_name} balance cache", {"cache_age_seconds": cache_age})
+            try:
+                balance_time = datetime.fromisoformat(cache["balance_timestamp"])
+                cache_age = (current_time - balance_time).total_seconds()
+                if cache_age <= 300:  # 5分钟缓存
+                    result["balance"] = cache.get("balance_data")
+                    log_message("statusline", "DEBUG", f"Using {platform_name} balance cache", {"cache_age_seconds": cache_age})
+                else:
+                    log_message("statusline", "DEBUG", f"{platform_name} balance cache expired", {"cache_age_seconds": cache_age})
+            except ValueError as e:
+                log_message("statusline", "WARNING", f"Invalid {platform_name} balance timestamp: {e}")
 
         # 检查订阅缓存
         if cache.get("subscription_timestamp"):
-            subscription_time = datetime.fromisoformat(cache["subscription_timestamp"])
-            cache_age = (current_time - subscription_time).total_seconds()
-            if cache_age <= SUBSCRIPTION_CACHE_TIMEOUT:
-                result["subscriptions"] = cache.get("subscription_data")
+            try:
+                subscription_time = datetime.fromisoformat(cache["subscription_timestamp"])
+                cache_age = (current_time - subscription_time).total_seconds()
+                if cache_age <= SUBSCRIPTION_CACHE_TIMEOUT:
+                    result["subscriptions"] = cache.get("subscription_data")
+                    log_message("statusline", "DEBUG", f"Using {platform_name} subscription cache", {"cache_age_seconds": cache_age})
+                else:
+                    log_message("statusline", "DEBUG", f"{platform_name} subscription cache expired", {"cache_age_seconds": cache_age})
+            except ValueError as e:
+                log_message("statusline", "WARNING", f"Invalid {platform_name} subscription timestamp: {e}")
 
         return result
     except Exception as e:
@@ -445,62 +501,61 @@ def load_platform_cache(platform_name):
 
 
 def save_platform_cache(platform_name, balance_data=None, subscription_data=None):
-    """保存特定平台的缓存数据"""
+    """保存特定平台的缓存数据（带文件锁定）"""
     platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
 
     try:
         # 加载现有缓存
-        cache = {}
-        if platform_cache_file.exists():
-            with open(platform_cache_file, "r", encoding="utf-8-sig") as f:
-                cache = json.load(f)
-
+        cache = safe_json_read(platform_cache_file, {})
         current_time = datetime.now().isoformat()
 
         # 更新余额数据
         if balance_data is not None:
             cache["balance_data"] = balance_data
             cache["balance_timestamp"] = current_time
-            log_message("statusline", "DEBUG", f"Saving {platform_name} balance cache")
+            log_message("statusline", "DEBUG", f"Updating {platform_name} balance cache")
 
         # 更新订阅数据
         if subscription_data is not None:
             cache["subscription_data"] = subscription_data
             cache["subscription_timestamp"] = current_time
+            log_message("statusline", "DEBUG", f"Updating {platform_name} subscription cache")
 
-        # 写入文件
-        with open(platform_cache_file, "w", encoding="utf-8-sig") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=2)
+        # 安全写入文件（带锁定）
+        success = safe_json_write(platform_cache_file, cache)
+        if success:
+            log_message("statusline", "DEBUG", f"Successfully saved {platform_name} cache")
+        else:
+            log_message("statusline", "ERROR", f"Failed to write {platform_name} cache file")
     except Exception as e:
         log_message("statusline", "ERROR", f"Failed to save {platform_name} cache", {"error": str(e)})
 
 
 def save_cache(balance_data=None, subscription_data=None):
-    """保存缓存数据"""
+    """保存缓存数据（带文件锁定）"""
     try:
         # 读取现有缓存
-        existing_cache = {}
-        if CACHE_FILE.exists():
-            with open(CACHE_FILE, "r", encoding="utf-8-sig") as f:
-                existing_cache = json.load(f)
-
+        existing_cache = safe_json_read(CACHE_FILE, {})
         current_time = datetime.now().isoformat()
 
         # 更新余额数据
         if balance_data is not None:
             existing_cache["balance_data"] = balance_data
             existing_cache["balance_timestamp"] = current_time
+            log_message("statusline", "DEBUG", "Updating balance cache")
 
         # 更新订阅数据
         if subscription_data is not None:
             existing_cache["subscription_data"] = subscription_data
             existing_cache["subscription_timestamp"] = current_time
+            log_message("statusline", "DEBUG", "Updating subscription cache")
 
-        # 保存缓存
-        with open(CACHE_FILE, "w", encoding="utf-8-sig") as f:
-            json.dump(existing_cache, f)
-    except Exception:
-        pass
+        # 安全保存缓存（带锁定）
+        success = safe_json_write(CACHE_FILE, existing_cache)
+        if not success:
+            log_message("statusline", "ERROR", "Failed to write cache file")
+    except Exception as e:
+        log_message("statusline", "ERROR", f"Failed to save cache: {e}")
 
 
 # fetch_balance_data() 和 fetch_subscription_data() 已废弃
@@ -704,78 +759,84 @@ def display_status():
             log_message("statusline", "WARNING", "No platform detected", {"session_id": session_id})
 
         if platform:
-            # 使用平台特定的缓存数据
-            cached = load_platform_cache(platform.name)
-            log_message("statusline", "DEBUG", f"Checking {platform.name} platform cache")
+            try:
+                # 使用平台特定的缓存数据
+                cached = load_platform_cache(platform.name)
+                log_message("statusline", "DEBUG", f"Checking {platform.name} platform cache")
 
-            # 获取或更新余额数据
-            if config["show_balance"]:
-                balance_data = cached["balance"]
-                if balance_data is None:
-                    log_message("statusline", "DEBUG", f"Cache miss, fetching balance from {platform.name} API")
-                    try:
-                        balance_data = platform.fetch_balance_data()
-                        if balance_data:
-                            log_message("statusline", "INFO", f"Successfully fetched {platform.name} balance data", {
-                                "platform": platform.name,
-                                "balance_data_type": type(balance_data).__name__,
-                                "balance_data_keys": list(balance_data.keys()) if isinstance(balance_data, dict) else "not_dict"
-                            })
-                            save_platform_cache(
-                                platform.name, balance_data=balance_data
+                # 获取或更新余额数据
+                if config["show_balance"]:
+                    balance_data = cached["balance"]
+                    if balance_data is None:
+                        log_message("statusline", "DEBUG", f"Cache miss, fetching balance from {platform.name} API")
+                        try:
+                            balance_data = platform.fetch_balance_data()
+                            if balance_data:
+                                log_message("statusline", "INFO", f"Successfully fetched {platform.name} balance data", {
+                                    "platform": platform.name,
+                                    "balance_data_type": type(balance_data).__name__,
+                                    "balance_data_keys": list(balance_data.keys()) if isinstance(balance_data, dict) else "not_dict"
+                                })
+                                save_platform_cache(
+                                    platform.name, balance_data=balance_data
+                                )
+                            else:
+                                log_message("statusline", "WARNING", f"{platform.name} API returned empty balance data", {
+                                    "platform": platform.name,
+                                    "possible_causes": [
+                                        "Invalid API token",
+                                        "Network connectivity issues", 
+                                        "API server errors",
+                                        "Rate limiting"
+                                    ]
+                                })
+                        except Exception as e:
+                            log_message("statusline", "ERROR", f"{platform.name} balance API call failed", {"error": str(e)})
+
+                    if balance_data:
+                        try:
+                            balance_display = platform.format_balance_display(balance_data)
+
+                            # 如果是GAC Code平台，添加倍数信息
+                            if platform.name == "gaccode":
+                                multiplier_info = get_multiplier_info(config)
+                                if multiplier_info["active"]:
+                                    multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{reset}"
+                                    balance_display += f" {multiplier_mark}"
+
+                            status_parts.append(balance_display)
+                        except Exception as e:
+                            log_message("statusline", "ERROR", f"Failed to format balance display: {e}")
+                            status_parts.append("Balance:Error")
+
+                # 获取或更新订阅数据
+                if config["show_subscription"]:
+                    subscription_data = cached["subscriptions"]
+                    if subscription_data is None:
+                        log_message("statusline", "DEBUG", f"Fetching subscription info from {platform.name} API")
+                        try:
+                            subscription_data = platform.fetch_subscription_data()
+                            if subscription_data:
+                                log_message("statusline", "INFO", f"Successfully fetched {platform.name} subscription data")
+                                save_platform_cache(
+                                    platform.name, subscription_data=subscription_data
+                                )
+                        except Exception as e:
+                            log_message("statusline", "ERROR", f"{platform.name} subscription API call failed", {"error": str(e)})
+
+                    if subscription_data:
+                        try:
+                            subscription_display = platform.format_subscription_display(
+                                subscription_data
                             )
-                        else:
-                            log_message("statusline", "WARNING", f"{platform.name} API returned empty balance data", {
-                                "platform": platform.name,
-                                "possible_causes": [
-                                    "Invalid API token",
-                                    "Network connectivity issues", 
-                                    "API server errors",
-                                    "Rate limiting"
-                                ]
-                            })
-                    except Exception as e:
-                        log_message("statusline", "ERROR", f"{platform.name} balance API call failed", {"error": str(e)})
-
-                if balance_data:
-                    try:
-                        balance_display = platform.format_balance_display(balance_data)
-
-                        # 如果是GAC Code平台，添加倍数信息
-                        if platform.name == "gaccode":
-                            multiplier_info = get_multiplier_info(config)
-                            if multiplier_info["active"]:
-                                multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{reset}"
-                                balance_display += f" {multiplier_mark}"
-
-                        status_parts.append(balance_display)
-                    except Exception:
-                        status_parts.append("Balance:Error")
-
-            # 获取或更新订阅数据
-            if config["show_subscription"]:
-                subscription_data = cached["subscriptions"]
-                if subscription_data is None:
-                    log_message("statusline", "DEBUG", f"Fetching subscription info from {platform.name} API")
-                    try:
-                        subscription_data = platform.fetch_subscription_data()
-                        if subscription_data:
-                            log_message("statusline", "INFO", f"Successfully fetched {platform.name} subscription data")
-                            save_platform_cache(
-                                platform.name, subscription_data=subscription_data
-                            )
-                    except Exception as e:
-                        log_message("statusline", "ERROR", f"{platform.name} subscription API call failed", {"error": str(e)})
-
-                if subscription_data:
-                    try:
-                        subscription_display = platform.format_subscription_display(
-                            subscription_data
-                        )
-                        if subscription_display:  # 只有非空字符串才添加
-                            status_parts.append(subscription_display)
-                    except Exception:
-                        pass
+                            if subscription_display:  # 只有非空字符串才添加
+                                status_parts.append(subscription_display)
+                        except Exception as e:
+                            log_message("statusline", "ERROR", f"Failed to format subscription display: {e}")
+            finally:
+                # 确保平台实例被正确关闭
+                if platform:
+                    platform.close()
 
     # 根据布局配置输出
     if config["layout"] == "multi_line" and secondary_parts:
@@ -785,9 +846,15 @@ def display_status():
         # 单行显示，将secondary_parts加到主要部分后面
         all_parts = status_parts + secondary_parts
         try:
-            print(" ".join(all_parts), end="")
-        except UnicodeEncodeError:
+            output = " ".join(all_parts)
+            print(output, end="")
+            log_message("statusline", "DEBUG", "Status output generated successfully", {
+                "parts_count": len(all_parts),
+                "output_length": len(output)
+            })
+        except UnicodeEncodeError as e:
             # 处理Windows控制台的编码问题
+            log_message("statusline", "WARNING", f"Unicode encoding error, cleaning output: {e}")
             cleaned_parts = []
             for part in all_parts:
                 if isinstance(part, str):
@@ -795,6 +862,9 @@ def display_status():
                     part = part.encode('ascii', 'ignore').decode('ascii')
                 cleaned_parts.append(part)
             print(" ".join(cleaned_parts), end="")
+        except Exception as e:
+            log_message("statusline", "ERROR", f"Failed to output status: {e}")
+            print("Status Error", end="")  # 简单的错误显示
 
 
 if __name__ == "__main__":

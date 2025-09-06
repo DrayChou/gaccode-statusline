@@ -12,14 +12,16 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-# Import logger system
+# Import logger system and file lock utility
 try:
     # Try absolute import first (for Pylance/static analysis)
     from data.logger import log_message
+    from data.file_lock import safe_json_write, safe_json_read
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent / "data"))
     from logger import log_message
+    from file_lock import safe_json_write, safe_json_read
 
 
 class PlatformManager:
@@ -115,29 +117,53 @@ class PlatformManager:
             return config
 
         try:
-            with open(self.config_file, "r", encoding="utf-8-sig") as f:
+            config = safe_json_read(self.config_file, {})
+            if config:
                 log_message(
                     "platform-manager",
                     "DEBUG",
                     "Platform configuration loaded successfully",
                 )
-                return json.load(f)
-        except Exception:
+                return config
+            else:
+                log_message(
+                    "platform-manager",
+                    "WARNING",
+                    "Empty or invalid configuration file, using default config"
+                )
+                return self.get_default_config()
+        except Exception as e:
             log_message(
                 "platform-manager",
                 "ERROR",
                 "Failed to load configuration, using default config",
-                {"error": str(sys.exc_info()[1])},
+                {"error": str(e)},
             )
             return self.get_default_config()
 
     def save_config(self, config: Dict[str, Any]) -> bool:
-        """保存配置"""
+        """保存配置（带文件锁定）"""
         try:
+            # 确保settings存在
+            if "settings" not in config:
+                config["settings"] = {}
             config["settings"]["last_updated"] = datetime.now().isoformat()
-            with open(self.config_file, "w", encoding="utf-8-sig") as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            return True
+            
+            # 使用安全的文件写入（带锁定）
+            success = safe_json_write(self.config_file, config)
+            if success:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    "Configuration saved successfully"
+                )
+            else:
+                log_message(
+                    "platform-manager",
+                    "ERROR",
+                    "Failed to write configuration file"
+                )
+            return success
         except Exception as e:
             log_message(
                 "platform-manager",
@@ -186,10 +212,7 @@ class PlatformManager:
         """注册session到平台的映射关系"""
         try:
             # 读取现有mappings
-            mappings = {}
-            if self.session_file.exists():
-                with open(self.session_file, "r", encoding="utf-8-sig") as f:
-                    mappings = json.load(f)
+            mappings = safe_json_read(self.session_file, {})
 
             # 添加新的session映射，只存储平台名称
             mappings[session_uuid] = {
@@ -205,26 +228,72 @@ class PlatformManager:
                     reverse=True,
                 )
                 mappings = dict(sorted_items[:50])
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"Cleaned old session mappings, kept {len(mappings)} recent entries"
+                )
 
-            # 保存mappings
-            with open(self.session_file, "w", encoding="utf-8-sig") as f:
-                json.dump(mappings, f, indent=2, ensure_ascii=False)
-
-            return True
-        except Exception:
+            # 安全保存mappings（带锁定）
+            success = safe_json_write(self.session_file, mappings)
+            if success:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"Session {session_uuid} registered for platform {platform}"
+                )
+            else:
+                log_message(
+                    "platform-manager",
+                    "ERROR",
+                    f"Failed to register session {session_uuid}"
+                )
+            return success
+        except Exception as e:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                f"Failed to register session {session_uuid}: {e}"
+            )
             return False
 
     def get_session_config(self, session_uuid: str) -> Optional[Dict[str, Any]]:
         """根据session UUID获取完整配置"""
         try:
             if not self.session_file.exists():
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    "Session mapping file not found",
+                    {"file": str(self.session_file)}
+                )
                 return None
 
-            # Use utf-8-sig to handle UTF-8 BOM that may be present in the file
-            with open(self.session_file, "r", encoding="utf-8-sig") as f:
-                mappings = json.load(f)
-                return mappings.get(session_uuid)
-        except Exception:
+            # 使用安全的文件读取
+            mappings = safe_json_read(self.session_file, {})
+            session_config = mappings.get(session_uuid)
+            
+            if session_config:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"Found session config for {session_uuid}",
+                    {"platform": session_config.get("platform")}
+                )
+            else:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"No session config found for {session_uuid}"
+                )
+            
+            return session_config
+        except Exception as e:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                f"Failed to get session config for {session_uuid}: {e}"
+            )
             return None
 
     def get_current_session_config(self) -> Optional[Dict[str, Any]]:
@@ -232,16 +301,36 @@ class PlatformManager:
         try:
             session_info_file = self.data_dir / "cache" / "session-info-cache.json"
             if not session_info_file.exists():
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    "Session info cache file not found"
+                )
                 return None
 
-            with open(session_info_file, "r", encoding="utf-8-sig") as f:
-                session_info = json.load(f)
-                session_id = session_info.get("session_id")
+            # 使用安全的文件读取
+            session_info = safe_json_read(session_info_file, {})
+            session_id = session_info.get("session_id")
 
-                if session_id:
-                    return self.get_session_config(session_id)
-        except Exception:
-            pass
+            if session_id:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    f"Found current session ID: {session_id}"
+                )
+                return self.get_session_config(session_id)
+            else:
+                log_message(
+                    "platform-manager",
+                    "DEBUG",
+                    "No session ID in cache file"
+                )
+        except Exception as e:
+            log_message(
+                "platform-manager",
+                "ERROR",
+                f"Failed to get current session config: {e}"
+            )
 
         return None
 
@@ -262,9 +351,18 @@ class PlatformManager:
                 with open(old_token_file, "r", encoding="utf-8-sig") as f:
                     old_token = f.read().strip()
                 if old_token:
+                    log_message(
+                        "platform-manager",
+                        "INFO",
+                        "Migrating old token file to new config system"
+                    )
                     return self.set_platform_key("gaccode", old_token)
-            except Exception:
-                pass
+            except Exception as e:
+                log_message(
+                    "platform-manager",
+                    "ERROR",
+                    f"Failed to migrate old token: {e}"
+                )
         return False
 
     def list_platforms(self) -> None:

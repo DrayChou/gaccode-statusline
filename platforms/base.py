@@ -17,6 +17,29 @@ class BasePlatform(ABC):
         self.token = token
         self.config = config
         self._session = requests.Session()
+        self._session_closed = False
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensure session is closed"""
+        self.close()
+
+    def __del__(self):
+        """Destructor - ensure session is closed"""
+        self.close()
+
+    def close(self):
+        """Close the HTTP session"""
+        if hasattr(self, '_session') and self._session and not self._session_closed:
+            try:
+                self._session.close()
+                self._session_closed = True
+            except Exception:
+                # Ignore errors during cleanup
+                pass
 
     @property
     @abstractmethod
@@ -79,6 +102,15 @@ class BasePlatform(ABC):
         )
 
         try:
+            # Check if session is still available
+            if self._session_closed or not self._session:
+                log_message(
+                    f"{self.name}-platform",
+                    "ERROR", 
+                    "Cannot make request: session is closed"
+                )
+                return None
+            
             url = f"{self.api_base}{endpoint}"
             headers = self.get_headers()
 

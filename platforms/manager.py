@@ -78,27 +78,38 @@ class PlatformManager:
                             platform_token = platform_config.get("auth_token") or platform_config.get("api_key", token)
 
                         for platform_class in self._platform_classes:
-                            platform = platform_class(platform_token, config)
-                            if platform.name.lower() == platform_name:
-                                log_platform_detection(
-                                    session_id,
-                                    platform.name,
-                                    1.0,
-                                    "UUID_session_mapping",
-                                )
+                            try:
+                                platform = platform_class(platform_token, config)
+                                if platform.name.lower() == platform_name:
+                                    log_platform_detection(
+                                        session_id,
+                                        platform.name,
+                                        1.0,
+                                        "UUID_session_mapping",
+                                    )
+                                    log_message(
+                                        "platform-manager",
+                                        "INFO",
+                                        f"Platform instance created successfully",
+                                        {
+                                            "session_id": session_id,
+                                            "platform_name": platform.name,
+                                            "token_length": len(platform_token) if platform_token else 0,
+                                            "token_prefix": platform_token[:10] + "..." if platform_token and len(platform_token) > 10 else platform_token,
+                                            "platform_class": platform_class.__name__
+                                        }
+                                    )
+                                    return platform
+                                else:
+                                    # 关闭不匹配的平台实例
+                                    platform.close()
+                            except Exception as e:
                                 log_message(
                                     "platform-manager",
-                                    "INFO",
-                                    f"Platform instance created successfully",
-                                    {
-                                        "session_id": session_id,
-                                        "platform_name": platform.name,
-                                        "token_length": len(platform_token) if platform_token else 0,
-                                        "token_prefix": platform_token[:10] + "..." if platform_token and len(platform_token) > 10 else platform_token,
-                                        "platform_class": platform_class.__name__
-                                    }
+                                    "ERROR",
+                                    f"Failed to create platform instance: {platform_class.__name__}",
+                                    {"error": str(e)}
                                 )
-                                return platform
                     else:
                         log_message(
                             "platform-manager",
@@ -157,15 +168,26 @@ class PlatformManager:
                 )
                 
                 for platform_class in self._platform_classes:
-                    platform = platform_class(platform_token, config)
-                    if platform.name.lower() == platform_type:
-                        log_platform_detection(
-                            session_id,
-                            platform.name,
-                            0.9,
-                            "config_platform_type",
+                    try:
+                        platform = platform_class(platform_token, config)
+                        if platform.name.lower() == platform_type:
+                            log_platform_detection(
+                                session_id,
+                                platform.name,
+                                0.9,
+                                "config_platform_type",
+                            )
+                            return platform
+                        else:
+                            # 关闭不匹配的平台实例
+                            platform.close()
+                    except Exception as e:
+                        log_message(
+                            "platform-manager",
+                            "ERROR",
+                            f"Failed to create platform instance: {platform_class.__name__}",
+                            {"error": str(e)}
                         )
-                        return platform
             else:
                 log_message(
                     "platform-manager",
@@ -186,48 +208,75 @@ class PlatformManager:
         )
         
         for platform_class in self._platform_classes:
-            # 先尝试用当前token检测
-            platform = platform_class(token, config)
-            if platform.detect_platform(session_info, token):
-                log_platform_detection(
-                    session_id,
-                    platform.name,
-                    0.8,
-                    "traditional_detection",
-                )
-                return platform
-                
-            # 如果当前token为null，尝试从配置文件获取该平台的token
-            if not token:
-                platform_name = platform.name.lower()
-                platform_config = config_manager.get_platform_config(platform_name)
-                if platform_config and platform_config.get("enabled"):
-                    # 优先使用 auth_token，如果没有则使用 api_key
-                    platform_token = platform_config.get(
-                        "auth_token"
-                    ) or platform_config.get("api_key")
+            platform = None
+            platform_with_token = None
+            
+            try:
+                # 先尝试用当前token检测
+                platform = platform_class(token, config)
+                if platform.detect_platform(session_info, token):
+                    log_platform_detection(
+                        session_id,
+                        platform.name,
+                        0.8,
+                        "traditional_detection",
+                    )
+                    return platform
                     
-                    if platform_token:
-                        log_message(
-                            "platform-manager",
-                            "DEBUG",
-                            f"Trying {platform_name} detection with config token",
-                            {
-                                "token_length": len(platform_token),
-                                "token_prefix": platform_token[:10] + "..."
-                            }
-                        )
+                # 如果当前token为null，尝试从配置文件获取该平台的token
+                if not token:
+                    platform_name = platform.name.lower()
+                    platform_config = config_manager.get_platform_config(platform_name)
+                    if platform_config and platform_config.get("enabled"):
+                        # 优先使用 auth_token，如果没有则使用 api_key
+                        platform_token = platform_config.get(
+                            "auth_token"
+                        ) or platform_config.get("api_key")
                         
-                        # 用配置文件的token重新创建平台实例并检测
-                        platform_with_token = platform_class(platform_token, config)
-                        if platform_with_token.detect_platform(session_info, platform_token):
-                            log_platform_detection(
-                                session_id,
-                                platform_with_token.name,
-                                0.7,
-                                "traditional_with_config_token",
+                        if platform_token:
+                            log_message(
+                                "platform-manager",
+                                "DEBUG",
+                                f"Trying {platform_name} detection with config token",
+                                {
+                                    "token_length": len(platform_token),
+                                    "token_prefix": platform_token[:10] + "..."
+                                }
                             )
-                            return platform_with_token
+                            
+                            # 用配置文件的token重新创建平台实例并检测
+                            platform_with_token = platform_class(platform_token, config)
+                            if platform_with_token.detect_platform(session_info, platform_token):
+                                log_platform_detection(
+                                    session_id,
+                                    platform_with_token.name,
+                                    0.7,
+                                    "traditional_with_config_token",
+                                )
+                                # 关闭第一个平台实例，返回第二个
+                                if platform:
+                                    platform.close()
+                                return platform_with_token
+                            else:
+                                # 关闭第二个平台实例
+                                platform_with_token.close()
+                
+                # 关闭不匹配的平台实例
+                if platform:
+                    platform.close()
+                    
+            except Exception as e:
+                log_message(
+                    "platform-manager",
+                    "ERROR",
+                    f"Error during platform detection: {platform_class.__name__}",
+                    {"error": str(e)}
+                )
+                # 清理资源
+                if platform:
+                    platform.close()
+                if platform_with_token:
+                    platform_with_token.close()
 
         return None
 
@@ -236,11 +285,34 @@ class PlatformManager:
     ) -> Optional[BasePlatform]:
         """Get platform by name"""
         for platform_class in self._platform_classes:
-            platform = platform_class(token, config)
-            if platform.name.lower() == name.lower():
-                return platform
+            try:
+                platform = platform_class(token, config)
+                if platform.name.lower() == name.lower():
+                    return platform
+                else:
+                    # 关闭不匹配的平台实例
+                    platform.close()
+            except Exception as e:
+                log_message(
+                    "platform-manager",
+                    "ERROR",
+                    f"Failed to create platform {platform_class.__name__}: {e}"
+                )
         return None
 
     def list_supported_platforms(self) -> List[str]:
         """List all supported platform names"""
-        return [cls(None, {}).name for cls in self._platform_classes]
+        platforms = []
+        for cls in self._platform_classes:
+            try:
+                # 创建临时实例获取名称，然后立即关闭
+                temp_platform = cls(None, {})
+                platforms.append(temp_platform.name)
+                temp_platform.close()
+            except Exception as e:
+                log_message(
+                    "platform-manager",
+                    "WARNING",
+                    f"Failed to get platform name for {cls.__name__}: {e}"
+                )
+        return platforms

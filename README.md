@@ -168,7 +168,7 @@ All platform configurations are managed through `examples/launcher-config.json`:
     "gaccode": {
       "name": "GAC Code",
       "api_base_url": "https://relay05.gaccode.com/claudecode",
-      "api_key": "sk-ant-oat01-...",
+      "api_key": "sk-ant-1234-...",
       "login_token": "eyJhbGciOiJIUzI1NiIs...",
       "model": "",
       "small_model": "",
@@ -177,7 +177,7 @@ All platform configurations are managed through `examples/launcher-config.json`:
     "deepseek": {
       "name": "DeepSeek",
       "api_base_url": "https://api.deepseek.com/anthropic",
-      "api_key": "sk-1b056c92bc664787aa6161b5fe091a9a",
+      "api_key": "sk-1234...",
       "model": "deepseek-chat",
       "small_model": "deepseek-chat",
       "enabled": true

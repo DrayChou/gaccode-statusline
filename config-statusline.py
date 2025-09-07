@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude Code Status Line - Configuration Tool
-状态栏配置工具 - 支持多模式配置和智能设置
+Claude Code Status Line - Configuration Library
+状态栏配置库 - 支持纯配置文件管理（不提供CLI接口）
+
+注意：此文件已改为纯库文件，不再提供命令行接口
+用户应直接编辑 data/config/config.json 文件进行配置
 """
 
 import json
 import sys
 import os
-import argparse
 from pathlib import Path
 
 # Import unified configuration manager
@@ -230,57 +232,8 @@ def reset_config():
         print("配置已重置为默认值")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="GAC Code Multi-Mode Configuration Tool")
-    parser.add_argument("--show", action="store_true", help="Show current configuration")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Interactive configuration mode")
-    parser.add_argument("--reset", action="store_true", help="Reset to default configuration")
-    parser.add_argument("--set", nargs=2, metavar=("KEY", "VALUE"), 
-                       help="Set configuration value (e.g., --set show_balance true)")
-    parser.add_argument("--mode", 
-                       help="Quick setup mode (basic, single:<platform>, multi)")
-    parser.add_argument("--set-default-platform", 
-                       help="Set default platform for Single Platform Mode")
-    parser.add_argument("--test-mode", 
-                       help="Test mode detection for session ID")
-    parser.add_argument("--examples", action="store_true", 
-                       help="Show mode setup examples")
-
-    args = parser.parse_args()
-
-    if args.show:
-        print_current_config()
-    elif args.interactive:
-        interactive_config()
-    elif args.reset:
-        reset_config()
-    elif args.set:
-        key, value = args.set
-        config = load_config()
-        if key not in config:
-            print(f"错误: 未知的配置项 '{key}'")
-            print("可用的配置项:")
-            for k in config.keys():
-                print(f"  {k}")
-            return
-
-        # 转换值类型
-        if value.lower() in ["true", "yes", "1", "on"]:
-            config[key] = True
-        elif value.lower() in ["false", "no", "0", "off"]:
-            config[key] = False
-        else:
-            config[key] = value
-
-        if save_config(config):
-            print(f"配置项 {key} 已设置为 {config[key]}")
-    else:
-        print_current_config()
-        print("\n使用方法:")
-        print("  python config-statusline.py --show          # 显示当前配置")
-        print("  python config-statusline.py --interactive   # 交互式配置")
-        print("  python config-statusline.py --reset         # 重置为默认配置")
-        print("  python config-statusline.py --set KEY VALUE # 设置单个配置项")
+# main函数已删除 - 不再提供CLI接口
+# 用户应直接编辑 data/config/config.json 文件进行配置
 
 
 def quick_setup_mode(mode_name):
@@ -320,6 +273,7 @@ def quick_setup_mode(mode_name):
         print("Available modes: basic, single:<platform>, multi")
 
 
-# 此文件已被废弃，不再提供命令行配置接口
-# 按照纯配置驱动架构设计，用户应直接编辑 data/config/config.json 文件
+# 此文件为纯库文件，专注于配置管理功能
+# 按照纯配置驱动架构设计，不提供命令行接口
+# 用户通过修改 data/config/config.json 文件管理配置，通过Python接口使用配置功能
 # 如需要初始化配置，请参考 CONFIGURATION_GUIDE.md 指南

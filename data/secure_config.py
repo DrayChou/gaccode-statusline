@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Secure Configuration Manager
-安全配置管理器 - 环境变量优先，敏感数据保护
+安全配置管理器 - 纯配置文件架构，敏感数据保护
 """
 
 import os
@@ -24,7 +24,7 @@ except ImportError:
 
 
 class SecureConfigLoader:
-    """安全配置加载器 - 环境变量优先，敏感数据掩码"""
+    """安全配置加载器 - 纯配置文件架构，敏感数据掩码"""
     
     # 敏感字段模式匹配
     SENSITIVE_PATTERNS = [
@@ -229,4 +229,4 @@ def load_secure_platform_config(platform: str) -> Dict[str, str]:
 
 # 此模块为纯库文件，专注于安全配置管理功能
 # 按照配置驱动架构设计，不提供命令行接口
-# 用户通过设置环境变量和修改配置文件管理凭证，通过Python接口使用安全功能
+# 用户通过修改配置文件管理凭证，通过Python接口使用安全功能

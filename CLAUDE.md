@@ -13,12 +13,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ❌ **NO fallback to environment variables** - Config file is the single source of truth
 - ✅ **ONLY config file** - `data/config/config.json` is the sole configuration method
 
+### Technical Exception: Multi-Platform Launcher
+**IMPORTANT**: The `bin/launcher.py` contains a necessary technical exception:
+- **WHY**: Claude Code requires environment variables (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) to function
+- **SCOPE**: Limited to launcher process only - does not affect core library modules
+- **USER IMPACT**: Users still configure via config files only
+- **ISOLATION**: Environment variables are set internally by launcher, not exposed to users
+
 ### Code Requirements:
-- Remove ALL `os.environ.get()` calls
-- Remove ALL `export`/`$env:` references from documentation
+- Remove ALL `os.environ.get()` calls from core modules (data/, platforms/, etc.)
+- Remove ALL `export`/`$env:` references from user documentation
 - Remove ALL argparse and CLI interfaces from core modules
-- Remove ALL environment variable fallback logic
+- Remove ALL environment variable fallback logic from libraries
 - Users configure EVERYTHING by editing `data/config/config.json`
+- **EXCEPTION**: `bin/launcher.py` may set environment variables internally for Claude Code compatibility
 
 ## Project Overview
 
@@ -75,14 +83,9 @@ data/
 
 **Secure API Key Configuration**:
 ```bash
-# Method 1 - Configuration File (Recommended)
-# Manually edit data/config/launcher-config.json to add API keys
-# This avoids exposing keys in shell history
-
-# Method 2 - Environment Variables (Advanced)
-export DEEPSEEK_API_KEY="sk-your-actual-key"
-export KIMI_API_KEY="sk-your-actual-key"
-# Keys will be automatically detected from environment variables
+# Configuration File Method (ONLY supported method)
+# Edit data/config/config.json to add API keys
+# This is the only way to configure the system - no environment variables
 
 # View platform status (keys are masked for security)
 python platform_manager.py list
@@ -244,8 +247,8 @@ if "kimi" in model_id:  # ❌ WRONG - Don't do this
 - **API Key vs Auth Token**: Different platforms use different authentication methods
   - `api_key`: DeepSeek, SiliconFlow (`"api_key": "sk-..."`)
   - `auth_token`: Kimi/Moonshot (`"auth_token": "sk-..."`)
-- **Environment Variables**: Launcher sets `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` (mutually exclusive)
-- **Token Priority**: Platform config token > environment variable > fallback detection
+- **Config-Only Authentication**: All authentication managed via `data/config/config.json`
+- **Launcher Internal Process**: Launcher reads config and sets environment variables internally for Claude Code compatibility
 
 ### Caching Strategy
 - **Multi-tier Caching**: UI refresh (1s) → Balance cache (5min) → Subscription cache (1hr)

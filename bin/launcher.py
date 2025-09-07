@@ -276,10 +276,13 @@ class ClaudeLauncher:
             is_enabled = platform_config.get("enabled")
             has_api_key = platform_config.get("api_key")
             has_login_token = platform_config.get("login_token")
+            has_auth_token = platform_config.get("auth_token")
 
-            # GAC Code平台可以使用login_token，其他平台需要api_key
+            # 检查是否有任何形式的认证凭证
+            has_credentials = has_api_key or has_login_token or has_auth_token
+            
             # GAC Code平台即使没有配置token也默认启用（会使用默认配置）
-            if is_enabled and (has_api_key or has_login_token or name == "gaccode"):
+            if is_enabled and (has_credentials or name == "gaccode"):
                 enabled_platforms[name] = platform_config
 
         if resolved_platform and resolved_platform in enabled_platforms:
@@ -411,7 +414,13 @@ class ClaudeLauncher:
                 del os.environ[var_name]
 
         # 为Claude Code设置新环境变量
-        os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
+        # 根据平台配置设置正确的认证变量
+        if platform_config.get("api_key"):
+            os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
+        elif platform_config.get("auth_token"):
+            os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]  # Claude Code统一使用API_KEY
+        # 注意：login_token是GAC Code独有的用来查询余额的token，不用于Claude Code认证
+            
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
         os.environ["ANTHROPIC_MODEL"] = platform_config["model"]
         os.environ["ANTHROPIC_SMALL_FAST_MODEL"] = platform_config["small_model"]

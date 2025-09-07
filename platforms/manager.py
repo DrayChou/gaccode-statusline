@@ -320,6 +320,12 @@ class PlatformManager:
                         "ERROR",
                         f"Failed to create {platform_class.__name__} instance: {e}",
                     )
+                    # 确保在异常情况下也清理资源
+                    if 'temp_instance' in locals():
+                        try:
+                            temp_instance.close()
+                        except:
+                            pass  # 忽略清理时的异常
 
             log_message(
                 "platform-manager",

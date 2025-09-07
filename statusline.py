@@ -741,12 +741,8 @@ def get_color_code(value, thresholds):
         return "\033[92m"  # 绿色
 
 
-def display_status():
-    """显示状态信息"""
-    # 获取配置和session信息
-    config = load_config()
-    session_info = get_session_info()
-
+def collect_status_data(config, session_info):
+    """收集状态显示需要的所有数据"""
     # 提取基本信息
     model_name = session_info.get("model", {}).get("display_name", "Unknown")
     current_dir = session_info.get("workspace", {}).get("current_dir", "")
@@ -763,6 +759,58 @@ def display_status():
     # 获取时间信息
     current_time = get_current_time()
     session_duration = calculate_session_duration(session_info)
+    
+    return {
+        'model_name': model_name,
+        'current_dir': current_dir,
+        'dir_display': dir_display,
+        'git_info': git_info,
+        'current_time': current_time,
+        'session_duration': session_duration
+    }
+
+def get_color_scheme():
+    """定义颜色方案"""
+    return {
+        'reset': "\033[0m",
+        'green': "\033[32m",   # 模型
+        'cyan': "\033[36m",    # 目录
+        'yellow': "\033[33m",  # Git分支
+        'purple': "\033[35m",  # 时间
+        'blue': "\033[34m",    # 会话时长
+        'magenta': "\033[95m"  # Session成本
+    }
+
+def format_basic_status(config, data, colors):
+    """格式化基础状态信息（模型、时间、会话时长等）"""
+    status_parts = []
+    
+    # 1. 模型信息
+    if config["show_model"]:
+        status_parts.append(f"Model:{colors['green']}{data['model_name']}{colors['reset']}")
+
+    # 2. 当前时间
+    if config["show_time"]:
+        status_parts.append(f"Time:{colors['purple']}{data['current_time']}{colors['reset']}")
+
+    # 3. 会话时长
+    if config["show_session_duration"] and data['session_duration']:
+        status_parts.append(f"Duration:{colors['blue']}{data['session_duration']}{colors['reset']}")
+        
+    return status_parts
+
+def display_status():
+    """显示状态信息"""
+    # 获取配置和session信息
+    config = load_config()
+    session_info = get_session_info()
+
+    # 收集所有需要的数据
+    data = collect_status_data(config, session_info)
+    colors = get_color_scheme()
+    
+    # 格式化基础状态
+    status_parts = format_basic_status(config, data, colors)
 
     # 初始化状态栏部分
     status_parts = []

@@ -206,14 +206,11 @@ class ClaudeLauncher:
             return None
 
     def load_config(self) -> Dict[str, Any]:
-        """加载配置文件 - 按优先级顺序查找"""
-        # 定义查找顺序：
-        # 1. 当前工作目录 (执行命令时所在的目录)
-        # 2. 调用脚本所在目录 (通过环境变量或参数传递，这里先用当前目录)
-        # 3. launcher.py所在目录 (examples/)
-        # 4. 项目data/config目录 (gaccode.com/data/config/)
-
-        # 构建查找路径列表，避免重复
+        """加载配置文件 - 简化为2层查找"""
+        # 简化的查找逻辑：只有2个查找位置
+        # 1. 用户当前工作目录 (优先级最高)
+        # 2. 项目默认配置目录 (fallback)
+        
         search_paths = []
 
         # 1. 真实的用户工作目录 (在Push-Location之前捕获) - 添加安全验证
@@ -329,8 +326,20 @@ class ClaudeLauncher:
                 # 回退到UTF-8
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     return json.load(f)
+        except FileNotFoundError:
+            self.log("WARNING", f"Configuration file not found: {self.config_file}")
+            self.log("INFO", "Using default configuration")
+            return self.get_default_config()
+        except json.JSONDecodeError as e:
+            self.log("ERROR", f"Invalid JSON in configuration file: {e}")
+            self.log("ERROR", f"Please check {self.config_file} for syntax errors")
+            sys.exit(1)
+        except PermissionError:
+            self.log("ERROR", f"Permission denied accessing: {self.config_file}")
+            self.log("ERROR", "Please check file permissions")
+            sys.exit(1)
         except Exception as e:
-            self.log("ERROR", f"Failed to load configuration: {e}")
+            self.log("ERROR", f"Unexpected error loading configuration: {e}")
             sys.exit(1)
 
     def resolve_platform(
@@ -538,9 +547,16 @@ class ClaudeLauncher:
                 selected_platform, continue_session
             )
             return session_id
+        except ImportError as e:
+            self.log("ERROR", f"Session manager import failed: {e}")
+            self.log("ERROR", "Please ensure session_manager.py is in the data directory")
+            sys.exit(1)
         except Exception as e:
             self.log("ERROR", f"Session management failed: {e}")
-            sys.exit(1)
+            # 生成fallback session ID而不是完全失败
+            fallback_id = f"fallback-{uuid.uuid4()}"
+            self.log("WARNING", f"Using fallback session ID: {fallback_id}")
+            return fallback_id
 
     def _detect_claude_command(self) -> Optional[List[str]]:
         """智能检测Claude Code启动方式"""
@@ -710,8 +726,18 @@ class ClaudeLauncher:
             else:
                 result = subprocess.run(claude_args)
             return result.returncode
+        except FileNotFoundError:
+            self.log("ERROR", "Claude Code executable not found")
+            self.log("ERROR", "Please install Claude Code or check PATH")
+            return 1
+        except subprocess.CalledProcessError as e:
+            self.log("ERROR", f"Claude Code execution failed with exit code: {e.returncode}")
+            return e.returncode
+        except KeyboardInterrupt:
+            self.log("INFO", "Interrupted by user")
+            return 130
         except Exception as e:
-            self.log("ERROR", f"Execution failed: {e}")
+            self.log("ERROR", f"Unexpected execution error: {e}")
             return 1
 
     def run(self, args: List[str]):

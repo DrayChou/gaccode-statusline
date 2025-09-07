@@ -4,9 +4,9 @@
 
 set -e
 
-# Get script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LAUNCHER="$SCRIPT_DIR/launcher.py"
+# 用户可以在这里修改项目路径，默认为脚本的父目录（项目根目录）
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+LAUNCHER="$PROJECT_DIR/bin/launcher.py"
 
 # Check if Python is available
 if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
@@ -25,9 +25,7 @@ if [[ ! -f "$LAUNCHER" ]]; then
     exit 1
 fi
 
-# Capture real current directory and set environment variables
-export LAUNCHER_REAL_CWD="$(pwd)"
-export LAUNCHER_SCRIPT_DIR="$SCRIPT_DIR"
+# Pure config-file architecture - no environment variables needed
 
 # Pass all arguments to the Python launcher
 exec $PYTHON_CMD "$LAUNCHER" "$@"

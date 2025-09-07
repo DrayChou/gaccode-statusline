@@ -373,25 +373,6 @@ def get_platform_token(platform: str) -> Optional[str]:
     return platform_config.get("api_key") if platform_config else None
 
 
-if __name__ == "__main__":
-    import sys
-
-    manager = PlatformManager()
-
-    if len(sys.argv) < 2:
-        manager.list_platforms()
-        sys.exit(0)
-
-    command = sys.argv[1]
-
-    if command == "list":
-        manager.list_platforms()
-    elif command == "get-key" and len(sys.argv) == 3:
-        platform = sys.argv[2]
-        key = get_platform_token(platform)
-        print(f"{platform}: {key if key else 'Not set'}")
-    else:
-        print("Usage: python platform_manager.py [list|get-key <platform>]")
-        print(
-            "Note: For security reasons, use manual configuration instead of set-key command"
-        )
+# 此模块为纯库文件，专注于平台管理功能
+# 按照配置驱动架构设计，不提供命令行接口
+# 用户通过修改配置文件管理平台设置，通过Python接口使用平台功能

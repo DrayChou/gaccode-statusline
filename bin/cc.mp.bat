@@ -4,9 +4,9 @@ REM Calls the unified Python launcher
 
 setlocal
 
-REM Get the directory where this script is located
-set "SCRIPT_DIR=%~dp0"
-set "LAUNCHER=%SCRIPT_DIR%launcher.py"
+REM 用户可以在这里修改项目路径，默认为脚本的父目录（项目根目录）
+set "PROJECT_DIR=%~dp0.."
+set "LAUNCHER=%PROJECT_DIR%\bin\launcher.py"
 
 REM Check if Python is available
 python --version >nul 2>&1

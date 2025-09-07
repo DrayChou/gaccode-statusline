@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import argparse
+import uuid
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Protocol
 from datetime import datetime
@@ -28,13 +29,15 @@ script_dir = Path(__file__).parent
 sys.path.insert(0, str(script_dir.parent / "data"))
 
 try:
-    from session_manager import SessionManager
     from logger import log_message
     from file_lock import safe_json_write, safe_json_read
+    sys.path.insert(0, str(script_dir.parent))
+    from config import get_config_manager
+    from session import get_session_manager
 except ImportError as e:
     print(f"Failed to import required modules: {e}")
     print(
-        "Please ensure the data/ directory contains session_manager.py, logger.py, and file_lock.py"
+        "Please ensure unified modules (config.py, session.py, cache.py) are available"
     )
     sys.exit(1)
 
@@ -189,8 +192,9 @@ class ClaudeLauncher:
         script_dir: Optional[Path] = None
     ):
         self.script_dir = script_dir or Path(__file__).parent
-        self.config_file = self.script_dir / "launcher-config.json"
-        self.session_mapping_file = self.script_dir / "session-mappings.json"
+        # 使用统一管理器
+        self.config_manager = get_config_manager()
+        self.session_manager = get_session_manager()
 
         # 注入依赖或使用默认实现
         self.fs = fs_provider or DefaultFileSystemProvider()
@@ -251,82 +255,10 @@ class ClaudeLauncher:
             return None
 
     def load_config(self) -> Dict[str, Any]:
-        """加载配置文件 - 真正的2层查找"""
-        # 简化的查找逻辑：真正只有2个查找位置
-        # 1. 用户工作目录 (优先级最高) 
-        # 2. 项目默认配置目录 (fallback)
-        
-        search_paths = []
-
-        # Layer 1: 用户工作目录（优先）
-        # 尝试获取真实的用户工作目录
-        user_dir = None
-        real_cwd = os.environ.get("LAUNCHER_REAL_CWD")
-        if real_cwd:
-            validated_cwd = self._validate_path(real_cwd, "LAUNCHER_REAL_CWD environment variable")
-            if validated_cwd:
-                user_dir = validated_cwd
-        
-        # 如果无法获取真实目录，使用当前目录
-        if not user_dir:
-            user_dir = Path.cwd()
-        
-        search_paths.append(("User working directory", user_dir / "launcher-config.json"))
-
-        # Layer 2: 项目数据配置目录（fallback）
-        project_config_dir = self.script_dir.parent / "data" / "config"
-        search_paths.append(("Project config directory", project_config_dir / "launcher-config.json"))
-
-        # 查找配置文件
-        for description, path in search_paths:
-            if path.exists():
-                self.config_file = path
-                # 设置session mapping文件位置
-                if path.parent.name == "config":
-                    # data/config目录下，session映射文件在data/cache下
-                    self.session_mapping_file = path.parent.parent / "cache" / "session-mappings.json"
-                else:
-                    # 其他位置，在同目录下
-                    self.session_mapping_file = path.parent / "session-mappings.json"
-
-                print(Colors.colorize(f"Using config from {description}: {path}", Colors.GRAY))
-                break
-        else:
-            # 未找到配置文件，使用默认配置
-            self.log("WARNING", f"Configuration file not found in search paths:")
-            for i, (description, path) in enumerate(search_paths, 1):
-                print(f"  {i}. {description}: {path}")
-            self.log("INFO", "Using default configuration")
-            
-            # 设置默认配置文件位置（用于后续保存）
-            self.config_file = search_paths[1][1]  # 使用项目配置目录
-            self.session_mapping_file = self.config_file.parent.parent / "cache" / "session-mappings.json"
-            return self.get_default_config()
-
-        # 加载配置文件
-        try:
-            # 尝试UTF-8-sig编码以处理BOM
-            try:
-                with open(self.config_file, "r", encoding="utf-8-sig") as f:
-                    return json.load(f)
-            except UnicodeDecodeError:
-                # 回退到UTF-8
-                with open(self.config_file, "r", encoding="utf-8") as f:
-                    return json.load(f)
-        except FileNotFoundError:
-            self.log("ERROR", f"Configuration file not found: {self.config_file}")
-            sys.exit(1)
-        except json.JSONDecodeError as e:
-            self.log("ERROR", f"Invalid JSON in configuration file: {e}")
-            self.log("ERROR", f"Please check {self.config_file} for syntax errors")
-            sys.exit(1)
-        except PermissionError:
-            self.log("ERROR", f"Permission denied accessing: {self.config_file}")
-            self.log("ERROR", "Please check file permissions")
-            sys.exit(1)
-        except OSError as e:
-            self.log("ERROR", f"OS error loading configuration: {e}")
-            sys.exit(1)
+        """加载配置文件 - 使用统一配置管理器"""
+        config = self.config_manager.load_config()
+        print(Colors.colorize("Using unified configuration system", Colors.GRAY))
+        return config
 
     def resolve_platform(
         self, platform: str, config: Dict[str, Any]
@@ -368,7 +300,7 @@ class ClaudeLauncher:
         else:
             if enabled_platforms:
                 # 使用默认平台
-                default_platform = config["settings"].get("default_platform")
+                default_platform = config["launcher"].get("default_platform")
                 if default_platform and default_platform in enabled_platforms:
                     print(
                         Colors.colorize(
@@ -395,7 +327,7 @@ class ClaudeLauncher:
 
     def sync_configuration(self, config: Dict[str, Any]):
         """同步配置到插件目录"""
-        plugin_path = Path(config.get("settings", {}).get("plugin_path", ""))
+        plugin_path = Path(config.get("launcher", {}).get("plugin_path", ""))
         if not plugin_path.is_absolute():
             plugin_path = self.script_dir / plugin_path
 
@@ -417,7 +349,6 @@ class ClaudeLauncher:
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         plugin_config_file = config_dir / "launcher-config.json"
-        plugin_session_file = cache_dir / "session-mappings.json"
 
         print(
             Colors.colorize("Syncing configuration to plugin directory...", Colors.CYAN)
@@ -428,7 +359,7 @@ class ClaudeLauncher:
             "platforms": config["platforms"],
             "aliases": config.get("aliases", {}),
             "settings": {
-                "default_platform": config["settings"].get("default_platform"),
+                "default_platform": config["launcher"].get("default_platform"),
                 "last_updated": datetime.now().isoformat(),
             },
         }
@@ -439,11 +370,10 @@ class ClaudeLauncher:
         else:
             self.log("ERROR", f"Failed to sync configuration to {plugin_config_file}")
             print(Colors.colorize("   Plugin configuration sync failed", Colors.RED))
-        return plugin_session_file
 
     def setup_environment(self, platform_config: Dict[str, Any]):
-        """设置环境变量"""
-        print(Colors.colorize("\nSetting up environment...", Colors.CYAN))
+        """为Claude Code设置环境变量"""
+        print(Colors.colorize("\nSetting up Claude Code environment...", Colors.CYAN))
 
         # 清理环境变量
         variables_to_clear = [
@@ -480,7 +410,7 @@ class ClaudeLauncher:
                 print(Colors.colorize(f"  -> Clearing: {var_name}", Colors.GRAY))
                 del os.environ[var_name]
 
-        # 设置新环境变量
+        # 为Claude Code设置新环境变量
         os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
         os.environ["ANTHROPIC_MODEL"] = platform_config["model"]
@@ -518,7 +448,7 @@ class ClaudeLauncher:
                 )
                 break
 
-        print(Colors.colorize("Environment configured", Colors.GREEN))
+        print(Colors.colorize("Claude Code environment configured", Colors.GREEN))
 
     def manage_session(self, selected_platform: str, continue_session: bool) -> str:
         """管理会话"""
@@ -528,19 +458,22 @@ class ClaudeLauncher:
             print(Colors.colorize("Continue session mode enabled", Colors.CYAN))
 
         try:
-            manager = SessionManager()
-            session_id = manager.create_or_continue_session(
-                selected_platform, continue_session
-            )
-            return session_id
-        except ImportError as e:
-            self.log("ERROR", f"Session manager import failed: {e}")
-            self.log("ERROR", "Please ensure session_manager.py is in the data directory")
-            sys.exit(1)
+            session = self.session_manager.create_session(selected_platform, continue_session)
+            
+            # 创建双UUID映射（向后兼容）
+            prefixed_uuid = session.prefixed_uuid
+            standard_uuid = session.standard_uuid
+            
+            print(Colors.colorize(
+                f"Created dual UUID mapping: {prefixed_uuid} <-> {standard_uuid} -> {selected_platform}",
+                Colors.GRAY
+            ))
+            
+            return session.session_id
         except Exception as e:
             self.log("ERROR", f"Session management failed: {e}")
             # 生成fallback session ID而不是完全失败
-            fallback_id = f"fallback-{uuid.uuid4()}"
+            fallback_id = f"fallback-{str(uuid.uuid4())}"
             self.log("WARNING", f"Using fallback session ID: {fallback_id}")
             return fallback_id
 
@@ -771,7 +704,7 @@ class ClaudeLauncher:
         print(Colors.colorize(f"   Enabled Platforms: {enabled_count}", Colors.GRAY))
 
         # 同步配置
-        plugin_session_file = self.sync_configuration(config)
+        self.sync_configuration(config)
 
         # 设置环境
         self.setup_environment(platform_config)

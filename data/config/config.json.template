@@ -1,0 +1,96 @@
+{
+  "version": "2.0",
+  "last_updated": "2025-01-01T00:00:00.000000",
+  "platforms": {
+    "gaccode": {
+      "name": "GAC Code",
+      "api_base_url": "https://relay05.gaccode.com/claudecode",
+      "api_key": "",
+      "login_token": "",
+      "model": "",
+      "small_model": "",
+      "enabled": true
+    },
+    "kimi": {
+      "name": "Kimi",
+      "api_base_url": "https://api.moonshot.cn/anthropic",
+      "auth_token": "",
+      "model": "kimi-k2-0905-preview",
+      "small_model": "kimi-k2-0905-preview",
+      "enabled": true
+    },
+    "deepseek": {
+      "name": "DeepSeek",
+      "api_base_url": "https://api.deepseek.com/anthropic",
+      "api_key": "",
+      "model": "deepseek-v3",
+      "small_model": "deepseek-v3",
+      "enabled": true
+    },
+    "siliconflow": {
+      "name": "SiliconFlow",
+      "api_base_url": "https://api.siliconflow.cn/anthropic",
+      "api_key": "",
+      "model": "claude-3-5-sonnet-20241022",
+      "small_model": "claude-3-5-haiku-20241022",
+      "enabled": true
+    },
+    "local_proxy": {
+      "name": "Local Proxy",
+      "api_base_url": "http://localhost:8000/anthropic",
+      "api_key": "",
+      "model": "claude-3-5-sonnet-20241022",
+      "small_model": "claude-3-5-haiku-20241022",
+      "enabled": false
+    }
+  },
+  "launcher": {
+    "default_platform": "gaccode",
+    "session_cache_ttl": 3600,
+    "auto_continue_sessions": true,
+    "log_level": "INFO"
+  },
+  "statusline": {
+    "show_model": true,
+    "show_directory": true,
+    "show_git_branch": true,
+    "show_time": true,
+    "show_session_duration": false,
+    "show_session_cost": true,
+    "show_balance": true,
+    "show_subscription": true,
+    "show_today_usage": true,
+    "directory_full_path": true,
+    "layout": "single_line",
+    "multiplier_config": {
+      "enabled": true,
+      "periods": [
+        {
+          "name": "peak_hour",
+          "start_time": "16:30",
+          "end_time": "18:30",
+          "multiplier": 5,
+          "display_text": "5X",
+          "weekdays_only": true,
+          "color": "red"
+        },
+        {
+          "name": "off_peak",
+          "start_time": "01:00",
+          "end_time": "10:00",
+          "multiplier": 0.8,
+          "display_text": "0.8X",
+          "weekdays_only": false,
+          "color": "green"
+        }
+      ]
+    }
+  },
+  "cache": {
+    "balance_ttl": 300,
+    "subscription_ttl": 3600,
+    "usage_ttl": 600,
+    "session_info_ttl": 60,
+    "memory_cache_size": 1000
+  }
+}

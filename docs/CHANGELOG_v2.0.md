@@ -48,7 +48,7 @@
 #### 敏感信息保护
 - **日志屏蔽**: API密钥和令牌在所有日志输出中自动屏蔽
 - **配置模板**: 提供安全的配置模板，使用占位符避免意外提交真实密钥
-- **环境变量支持**: 推荐使用环境变量存储敏感信息
+- **安全配置文件**: 推荐使用安全配置文件存储敏感信息
 
 #### .gitignore升级
 ```gitignore
@@ -214,9 +214,9 @@ python examples/launcher.py dp --dry-run
    cp examples/launcher-config.template.json examples/launcher-config.json
    # 编辑配置文件，替换占位符
    
-   # 方法2：使用环境变量
-   export DEEPSEEK_API_KEY="your-key"
-   # 环境变量会自动被检测
+   # 方法2：编辑配置文件
+   nano data/config/config.json
+   # 在配置文件中设置密钥
    
    # 安全提醒：不要在命令行中直接传递API密钥
    ```

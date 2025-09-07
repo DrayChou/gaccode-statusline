@@ -201,30 +201,6 @@ def safe_json_read(file_path: Path, default: Optional[Dict[str, Any]] = None, ti
     return default or {}
 
 
-if __name__ == "__main__":
-    # 测试文件锁定功能
-    test_file = Path("test_lock.json")
-    test_data = {"test": "data", "timestamp": time.time()}
-    
-    print("Testing file locking...")
-    
-    # 测试写入
-    if safe_json_write(test_file, test_data):
-        print("[OK] Write test passed")
-    else:
-        print("[FAIL] Write test failed")
-    
-    # 测试读取
-    read_data = safe_json_read(test_file)
-    if read_data.get("test") == "data":
-        print("[OK] Read test passed")
-    else:
-        print("[FAIL] Read test failed")
-    
-    # 清理测试文件
-    try:
-        test_file.unlink()
-    except:
-        pass
-    
-    print("File locking test completed")
+# 此模块为纯库文件，专注于文件锁定和安全I/O功能
+# 按照配置驱动架构设计，不提供命令行接口
+# 通过Python接口使用文件锁定功能

@@ -11,7 +11,7 @@
 
 **最佳实践**：
 - ✅ 直接编辑配置文件
-- ✅ 使用环境变量
+- ✅ 使用安全的文件权限设置
 - ❌ 避免命令行传递密钥
 
 ## 推荐配置方法
@@ -49,24 +49,22 @@ cp examples/launcher-config.template.json examples/launcher-config.json
 python platform_manager.py list
 ```
 
-### 方法 2：环境变量（高级）
+### 方法 2：使用配置文件模板（高级）
 
-1. **设置环境变量**：
+1. **复制配置模板**：
 ```bash
-# Linux/Mac
-export DEEPSEEK_API_KEY="sk-your-deepseek-key"
-export KIMI_API_KEY="sk-your-kimi-key"
-export GAC_LOGIN_TOKEN="your-gac-login-token"
-
-# Windows PowerShell
-$env:DEEPSEEK_API_KEY = "sk-your-deepseek-key"
-$env:KIMI_API_KEY = "sk-your-kimi-key"
-$env:GAC_LOGIN_TOKEN = "your-gac-login-token"
+cp examples/launcher-config.template.json examples/launcher-config.json
 ```
 
-2. **环境变量会被自动检测**：
+2. **编辑配置文件填入真实密钥**：
 ```bash
-python platform_manager.py list  # 验证检测结果
+# 编辑主配置文件
+nano examples/launcher-config.json
+```
+
+3. **验证配置**：
+```bash
+python platform_manager.py list  # 验证配置状态
 ```
 
 ## 已移除的不安全命令
@@ -155,9 +153,9 @@ data/cache/session-mappings.json
 # 检查配置文件格式
 python -m json.tool examples/launcher-config.json
 
-# 检查环境变量
-echo $DEEPSEEK_API_KEY  # Linux/Mac
-echo $env:DEEPSEEK_API_KEY  # Windows PowerShell
+# 检查配置文件状态
+python platform_manager.py get-key deepseek  # 已屏蔽显示
+python config.py --get-effective-config      # 查看当前配置
 ```
 
 ### 权限问题
@@ -174,7 +172,7 @@ icacls examples\launcher-config.json  # Windows
 - [ ] 敏感文件已添加到 `.gitignore`
 - [ ] 定期轮换API密钥
 - [ ] 监控API使用情况，及时发现异常
-- [ ] 使用环境变量进行生产环境部署
+- [ ] 使用安全的配置文件管理系统
 
 ---
 

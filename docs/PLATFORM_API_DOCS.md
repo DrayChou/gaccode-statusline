@@ -350,14 +350,26 @@ Content-Type: application/json
 使用对应平台的 token 设置工具：
 
 ```bash
-# GAC Code (默认)
-python set-gac-token.py set "your-gac-token"
+# 编辑配置文件
+nano data/config/config.json
 
-# Kimi
-python set-gac-token.py set "sk-your-kimi-token"
-
-# DeepSeek
-python set-gac-token.py set "your-deepseek-token"
+# 配置格式示例:
+{
+  "platforms": {
+    "gaccode": {
+      "login_token": "your-gac-token",
+      "enabled": true
+    },
+    "kimi": {
+      "auth_token": "sk-your-kimi-token",
+      "enabled": true
+    },
+    "deepseek": {
+      "api_key": "your-deepseek-token",
+      "enabled": true
+    }
+  }
+}
 ```
 
 ## 显示格式

@@ -19,6 +19,15 @@ class BasePlatform(ABC):
         self.token = token
         self.config = config
         self._session = requests.Session()
+        # 安全配置
+        self._session.verify = True  # 强制SSL证书验证
+        self._session.timeout = (5, 30)  # 连接超时5秒，读取超时30秒
+        # 设置安全请求头
+        self._session.headers.update({
+            'User-Agent': 'GAC-Code-StatusLine/2.0',
+            'Accept': 'application/json',
+            'Connection': 'close'  # 防止连接复用泄露
+        })
         self._session_closed = False
         
         # Rate limiting and retry configuration
@@ -175,7 +184,14 @@ class BasePlatform(ABC):
                     },
                 )
 
-                response = self._session.get(url, headers=headers, timeout=timeout)
+                # 安全的HTTP请求
+                response = self._session.get(
+                    url, 
+                    headers=headers, 
+                    timeout=timeout,
+                    verify=True,  # 强制SSL验证
+                    allow_redirects=False  # 禁止自动重定向防止攻击
+                )
 
                 log_message(
                     f"{self.name}-platform",

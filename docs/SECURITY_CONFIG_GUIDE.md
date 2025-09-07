@@ -19,45 +19,52 @@ GAC Code多平台系统的安全配置最佳实践，确保API密钥和敏感信
 
 ## 🔑 API密钥管理
 
-### 推荐方案：环境变量
+### 推荐方案：配置文件
 
 **优势**:
-- 不会意外提交到版本控制
-- 支持不同环境的不同配置
-- 操作系统级别的保护
+- 集中化的安全管理
+- 支持多平台配置
+- 文件系统级别的保护
 
 **设置方法**:
 
 ```bash
-# Linux/Mac
-export DEEPSEEK_API_KEY="sk-your-deepseek-key-here"
-export KIMI_API_KEY="sk-your-kimi-key-here"
-export GAC_LOGIN_TOKEN="your-gac-login-token-here"
-export SILICONFLOW_API_KEY="sk-your-sf-key-here"
+# 编辑主配置文件
+nano data/config/config.json
 
-# Windows PowerShell
-$env:DEEPSEEK_API_KEY="sk-your-deepseek-key-here"
-$env:KIMI_API_KEY="sk-your-kimi-key-here"
-$env:GAC_LOGIN_TOKEN="your-gac-login-token-here"
-$env:SILICONFLOW_API_KEY="sk-your-sf-key-here"
-
-# Windows Command Prompt
-set DEEPSEEK_API_KEY=sk-your-deepseek-key-here
-set KIMI_API_KEY=sk-your-kimi-key-here
-set GAC_LOGIN_TOKEN=your-gac-login-token-here
-set SILICONFLOW_API_KEY=sk-your-sf-key-here
+# 配置格式示例:
+{
+  "platforms": {
+    "deepseek": {
+      "api_key": "sk-your-deepseek-key-here",
+      "enabled": true
+    },
+    "kimi": {
+      "auth_token": "sk-your-kimi-key-here",
+      "enabled": true
+    },
+    "gaccode": {
+      "login_token": "your-gac-login-token-here",
+      "enabled": true
+    },
+    "siliconflow": {
+      "api_key": "sk-your-sf-key-here",
+      "enabled": true
+    }
+  }
+}
 ```
 
-**使用环境变量配置平台**:
+**使用配置文件管理平台**:
 
 ```bash
-# 环境变量会被自动检测，无需手动设置
-# 验证环境变量配置状态
+# 配置文件会被自动检测，无需手动设置
+# 验证配置文件状态
 python platform_manager.py list
 
 # 重要安全提醒：
 # 不要在命令行中直接传递API密钥，防止在shell历史中暴露
-# 环境变量是最安全的配置方式
+# 配置文件是安全的管理方式
 ```
 
 ### 备选方案：配置文件
@@ -230,15 +237,15 @@ python examples/launcher.py kimi --dry-run
 **问题**: 配置文件被意外提交
 **解决**: 使用`git rm --cached`移除，并更新`.gitignore`
 
-**问题**: 环境变量不生效
-**解决**: 确认环境变量在启动进程前设置，检查变量名是否正确
+**问题**: 配置文件不生效
+**解决**: 确认配置文件格式正确，检查文件权限和路径是否正确
 
 ### 调试安全问题
 
 ```bash
-# 检查环境变量
-echo $DEEPSEEK_API_KEY | cut -c1-10  # 只显示前10个字符
-env | grep -E "(DEEPSEEK|KIMI|GAC|SILICONFLOW)" | cut -d'=' -f1
+# 检查配置文件状态
+python platform_manager.py get-key deepseek  # 已屏蔽显示
+python config.py --get-effective-config  # 查看当前配置
 
 # 验证配置加载
 python -c "

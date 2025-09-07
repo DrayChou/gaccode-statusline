@@ -16,13 +16,13 @@ from pathlib import Path
 # Import using relative imports from parent directory
 try:
     # Try absolute import first
-    from platform_manager import PlatformManager as ConfigManager
+    from config import get_config_manager
     from data.logger import log_message, log_platform_detection, log_error
     from data.session_manager import SessionManager, detect_platform_from_session_id
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from platform_manager import PlatformManager as ConfigManager
+    from config import get_config_manager
 
     sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
     from logger import log_message, log_platform_detection, log_error
@@ -141,7 +141,7 @@ class PlatformManager:
                     )
 
         # 优先级2 - 配置文件显式指定
-        config_manager = ConfigManager()
+        config_manager = get_config_manager()
         platform_type = config.get("platform_type", "").lower()
         if platform_type:
             log_message(
@@ -189,7 +189,7 @@ class PlatformManager:
                 # 如果当前token为null，尝试从配置文件获取该平台的token
                 if not token:
                     platform_name = platform.name.lower()
-                    platform_config = config_manager.get_platform_config(platform_name)
+                    platform_config = config_manager.get_platform(platform_name)
                     if platform_config and platform_config.get("enabled"):
                         platform_token = platform_config.get(
                             "auth_token"
@@ -267,8 +267,8 @@ class PlatformManager:
             平台实例或None
         """
         try:
-            config_manager = ConfigManager()
-            platform_config = config_manager.get_platform_config(platform_name)
+            config_manager = get_config_manager()
+            platform_config = config_manager.get_platform(platform_name)
 
             if not platform_config or not platform_config.get("enabled"):
                 log_message(

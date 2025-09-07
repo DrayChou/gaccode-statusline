@@ -147,10 +147,6 @@ def update_usage_cache(today_date):
     return False
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        today_date = sys.argv[1]
-    else:
-        today_date = datetime.now().strftime("%Y%m%d")
-
-    update_usage_cache(today_date)
+# 此模块为纯库文件，专注于用量更新功能
+# 按照配置驱动架构设计，不提供命令行接口
+# 由statusline.py自动调用更新用量缓存

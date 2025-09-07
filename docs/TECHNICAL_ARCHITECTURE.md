@@ -242,15 +242,15 @@ flowchart TD
 ### 配置安全最佳实践
 ```bash
 # 推荐方法1：直接编辑配置文件
-# 编辑 examples/launcher-config.json，在相应平台字段中设置 API 密钥
+# 编辑 data/config/config.json，在相应平台字段中设置 API 密钥
 
-# 推荐方法2：环境变量方式
-export DEEPSEEK_API_KEY="sk-actual-key"
-# 环境变量会自动被检测
+# 推荐方法2：使用配置模板
+cp examples/launcher-config.template.json examples/launcher-config.json
+# 编辑模板文件填入真实密钥
 
 # 安全原则：
 # ❌ 不要在命令行中直接传递API密钥
-# ✅ 直接编辑配置文件或使用环境变量
+# ✅ 使用安全的配置文件管理
 ```
 
 ## ⚡ 性能优化

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Claude Code Status Line - Configuration Tool
-状态栏配置工具
+状态栏配置工具 - 支持多模式配置和智能设置
 """
 
 import json
@@ -11,73 +11,117 @@ import os
 import argparse
 from pathlib import Path
 
+# Import unified configuration manager
+try:
+    from config import get_config_manager
+    from data.logger import log_message
+except ImportError:
+    # Fallback import for development
+    sys.path.insert(0, str(Path(__file__).parent))
+    from config import get_config_manager
+    sys.path.insert(0, str(Path(__file__).parent / "data"))
+    from logger import log_message
+
 # 设置控制台编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-# 配置
-PROJECT_DIR = Path(__file__).parent  # scripts/gaccode.com目录
-CONFIG_FILE = PROJECT_DIR / "statusline-config.json"
+# 项目目录
+PROJECT_DIR = Path(__file__).parent
+DATA_DIR = PROJECT_DIR / "data"
 
-# 默认显示配置
-DEFAULT_CONFIG = {
-    "show_model": True,
-    "show_directory": True,
-    "show_git_branch": True,
-    "show_time": True,
-    "show_session_duration": False,
-    "show_session_cost": True,
-    "show_balance": True,
-    "show_subscription": True,
-    "directory_full_path": True,
-    "layout": "single_line",  # single_line 或 multi_line
-}
+# 确保目录存在
+(DATA_DIR / "config").mkdir(parents=True, exist_ok=True)
+(DATA_DIR / "cache").mkdir(parents=True, exist_ok=True)
+
+# Configuration manager instance placeholder
 
 
-def load_config():
-    """加载当前配置"""
-    if not CONFIG_FILE.exists():
-        return DEFAULT_CONFIG.copy()
+# Legacy functions removed - now using unified config manager
 
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8-sig") as f:
-            config = json.load(f)
-            # 合并默认配置，确保所有选项都存在
-            result = DEFAULT_CONFIG.copy()
-            result.update(config)
-            return result
-    except Exception:
-        return DEFAULT_CONFIG.copy()
-
-
-def save_config(config):
-    """保存配置"""
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8-sig") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-        print(f"配置已保存到: {CONFIG_FILE}")
-        return True
-    except Exception as e:
-        print(f"保存配置失败: {e}")
-        return False
+def show_mode_examples():
+    """显示模式使用示例"""
+    print("\n=== Mode Examples ===")
+    print("\n1. Basic Mode (GAC Code only):")
+    print("   python config-statusline.py --mode basic")
+    
+    print("\n2. Single Platform Mode:")
+    print("   python config-statusline.py --mode single:deepseek")
+    print("   python config-statusline.py --mode single:kimi")
+    print("   python config-statusline.py --mode single:sf")
+    
+    print("\n3. Multi-Platform Mode:")
+    print("   python config-statusline.py --mode multi")
+    print("   # Then use launcher scripts:")
+    print("   .\\examples\\cc.mp.ps1 dp    # DeepSeek")
+    print("   .\\examples\\cc.mp.ps1 kimi  # Kimi")
+    
+    print("\n4. Test mode detection:")
+    print("   python config-statusline.py --test-mode 02abcdef-1234-5678-9012-123456789abc")
+    print("")
 
 
-def show_current_config():
-    """显示当前配置"""
-    config = load_config()
-
-    print("当前状态栏配置:")
-    print("=" * 50)
-    print(f"显示模型名称:      {config['show_model']}")
-    print(f"显示当前时间:      {config['show_time']}")
-    print(f"显示会话时长:      {config['show_session_duration']}")
-    print(f"显示会话成本:      {config['show_session_cost']}")
-    print(f"显示目录信息:      {config['show_directory']}")
-    print(f"显示Git分支:       {config['show_git_branch']}")
-    print(f"显示账户余额:      {config['show_balance']}")
-    print(f"显示订阅信息:      {config['show_subscription']}")
-    print(f"显示完整目录路径:  {config['directory_full_path']}")
-    print(f"显示布局:          {config['layout']}")
-    print("=" * 50)
+def print_current_config():
+    """打印当前配置"""
+    config_manager = get_config_manager()
+    config = config_manager.load_config()
+    
+    print("\n=== Current GAC Code Configuration ===")
+    
+    # 显示模式信息
+    launcher_settings = config_manager.get_launcher_settings()
+    default_platform = launcher_settings.get("default_platform", "gaccode")
+    
+    print(f"\nMode Configuration:")
+    print(f"  Default Platform: {default_platform}")
+    
+    # 显示有效平台（模拟没有session_id的情况）
+    effective_platform = config_manager.get_effective_platform()
+    print(f"  Effective Platform (no session): {effective_platform}")
+    
+    # 显示平台配置状态
+    print(f"\nPlatform Status:")
+    platforms = config_manager.get_platforms()
+    for platform_id, platform_config in platforms.items():
+        enabled = platform_config.get("enabled", False)
+        api_key = config_manager.get_platform_api_key(platform_id)
+        has_key = bool(api_key and api_key.strip())
+        
+        status_icon = "✓" if enabled and has_key else "✗" if enabled else "-"
+        key_status = "(key configured)" if has_key else "(no key)"
+        enabled_status = "enabled" if enabled else "disabled"
+        
+        print(f"  {status_icon} {platform_id}: {enabled_status} {key_status}")
+    
+    # 显示状态条配置
+    statusline_config = config_manager.get_statusline_settings()
+    print("\nStatusLine Display Options:")
+    for key in ["show_model", "show_directory", "show_git_branch", "show_time", 
+                "show_session_duration", "show_session_cost", "show_balance", 
+                "show_subscription", "show_today_usage"]:
+        value = statusline_config.get(key, False)
+        status = "✓" if value else "✗"
+        print(f"  {status} {key}: {value}")
+    
+    print(f"\nLayout: {statusline_config.get('layout', 'single_line')}")
+    print(f"Directory Full Path: {statusline_config.get('directory_full_path', True)}")
+    
+    # 显示倍率配置
+    multiplier_config = config_manager.get_multiplier_config()
+    if multiplier_config.get("enabled", True):
+        print("\nMultiplier Configuration: Enabled")
+        periods = multiplier_config.get("periods", [])
+        for period in periods:
+            name = period.get("name", "unknown")
+            start = period.get("start_time", "")
+            end = period.get("end_time", "")
+            multiplier = period.get("multiplier", 1)
+            display = period.get("display_text", f"{multiplier}X")
+            weekdays_only = " (weekdays only)" if period.get("weekdays_only", False) else ""
+            print(f"  - {name}: {start}-{end} = {display}{weekdays_only}")
+    else:
+        print("\nMultiplier Configuration: Disabled")
+    
+    print("")
 
 
 def interactive_config():
@@ -187,18 +231,25 @@ def reset_config():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Claude Code 状态栏配置工具")
-    parser.add_argument("--show", action="store_true", help="显示当前配置")
-    parser.add_argument("--interactive", action="store_true", help="交互式配置")
-    parser.add_argument("--reset", action="store_true", help="重置为默认配置")
-    parser.add_argument(
-        "--set", nargs=2, metavar=("KEY", "VALUE"), help="设置单个配置项"
-    )
+    parser = argparse.ArgumentParser(description="GAC Code Multi-Mode Configuration Tool")
+    parser.add_argument("--show", action="store_true", help="Show current configuration")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Interactive configuration mode")
+    parser.add_argument("--reset", action="store_true", help="Reset to default configuration")
+    parser.add_argument("--set", nargs=2, metavar=("KEY", "VALUE"), 
+                       help="Set configuration value (e.g., --set show_balance true)")
+    parser.add_argument("--mode", 
+                       help="Quick setup mode (basic, single:<platform>, multi)")
+    parser.add_argument("--set-default-platform", 
+                       help="Set default platform for Single Platform Mode")
+    parser.add_argument("--test-mode", 
+                       help="Test mode detection for session ID")
+    parser.add_argument("--examples", action="store_true", 
+                       help="Show mode setup examples")
 
     args = parser.parse_args()
 
     if args.show:
-        show_current_config()
+        print_current_config()
     elif args.interactive:
         interactive_config()
     elif args.reset:
@@ -224,7 +275,7 @@ def main():
         if save_config(config):
             print(f"配置项 {key} 已设置为 {config[key]}")
     else:
-        show_current_config()
+        print_current_config()
         print("\n使用方法:")
         print("  python config-statusline.py --show          # 显示当前配置")
         print("  python config-statusline.py --interactive   # 交互式配置")
@@ -232,5 +283,43 @@ def main():
         print("  python config-statusline.py --set KEY VALUE # 设置单个配置项")
 
 
-if __name__ == "__main__":
-    main()
+def quick_setup_mode(mode_name):
+    """快速设置特定模式
+    
+    Args:
+        mode_name: 'basic', 'single:<platform>', 'multi'
+    """
+    config_manager = get_config_manager()
+    
+    if mode_name == 'basic':
+        # 基础模式 - 重置为GAC Code默认
+        config_manager.set_default_platform('gaccode')
+        print("✓ Basic Mode configured (GAC Code default)")
+        
+    elif mode_name.startswith('single:'):
+        # 单平台模式
+        _, platform = mode_name.split(':', 1)
+        platform = config_manager.resolve_platform_alias(platform)
+        
+        if config_manager.set_default_platform(platform):
+            print(f"✓ Single Platform Mode configured ({platform})")
+        else:
+            print(f"✗ Failed to configure Single Platform Mode for {platform}")
+            
+    elif mode_name == 'multi':
+        # 多平台模式 - 重置默认平台为gaccode，显示使用说明
+        config_manager.set_default_platform('gaccode')
+        print("✓ Multi-Platform Mode configured")
+        print("Use launcher scripts:")
+        print("  .\\examples\\cc.mp.ps1 dp    # DeepSeek")
+        print("  .\\examples\\cc.mp.ps1 kimi  # Kimi") 
+        print("  .\\examples\\cc.mp.ps1 sf    # SiliconFlow")
+        
+    else:
+        print(f"Unknown mode: {mode_name}")
+        print("Available modes: basic, single:<platform>, multi")
+
+
+# 此文件已被废弃，不再提供命令行配置接口
+# 按照纯配置驱动架构设计，用户应直接编辑 data/config/config.json 文件
+# 如需要初始化配置，请参考 CONFIGURATION_GUIDE.md 指南

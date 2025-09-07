@@ -20,11 +20,14 @@ try:
     # Try absolute import first (for Pylance/static analysis)
     from data.logger import log_message
     from data.file_lock import safe_json_write, safe_json_read
+    from cache import get_cache_manager
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent / "data"))
     from logger import log_message
     from file_lock import safe_json_write, safe_json_read
+    sys.path.insert(0, str(Path(__file__).parent))
+    from cache import get_cache_manager
 
 # 设置控制台编码
 os.environ["PYTHONIOENCODING"] = "utf-8"
@@ -86,7 +89,47 @@ DEFAULT_CONFIG = {
 
 
 def load_config():
-    """加载显示配置"""
+    """智能加载显示配置 - 优先使用统一配置管理器"""
+    try:
+        # 优先使用统一配置管理器
+        from config import get_config_manager
+        config_manager = get_config_manager()
+        
+        # 获取状态条配置
+        statusline_config = config_manager.get_statusline_settings()
+        
+        # 获取倍率配置
+        multiplier_config = config_manager.get_multiplier_config()
+        
+        # 合并配置
+        result = DEFAULT_CONFIG.copy()
+        result.update(statusline_config)
+        if multiplier_config:
+            result["multiplier_config"] = multiplier_config
+            
+        log_message(
+            "statusline", "INFO", 
+            "Configuration loaded from unified config manager",
+            {
+                "statusline_keys": list(statusline_config.keys()),
+                "multiplier_enabled": multiplier_config.get("enabled", False)
+            }
+        )
+        
+        return result
+        
+    except Exception as e:
+        log_message(
+            "statusline", "WARNING", 
+            f"Failed to load from unified config manager: {e}, falling back to legacy method"
+        )
+        
+        # 回退到传统配置加载
+        return load_legacy_config()
+
+
+def load_legacy_config():
+    """传统配置加载方法（回退方案）"""
     if not CONFIG_FILE.exists():
         log_message(
             "statusline",
@@ -102,7 +145,7 @@ def load_config():
             # 合并默认配置，确保所有选项都存在
             result = DEFAULT_CONFIG.copy()
             result.update(config)
-            log_message("statusline", "DEBUG", "Config loaded successfully")
+            log_message("statusline", "DEBUG", "Legacy config loaded successfully")
             return result
         else:
             log_message(
@@ -113,7 +156,7 @@ def load_config():
         log_message(
             "statusline",
             "ERROR",
-            f"Failed to load config: {e}",
+            f"Failed to load legacy config: {e}",
             {"file": str(CONFIG_FILE)},
         )
         return DEFAULT_CONFIG
@@ -354,28 +397,17 @@ def check_npx_available():
 
 def get_today_usage():
     """获取今日使用量"""
-    # 首先检查缓存文件是否存在
-    if USAGE_CACHE_FILE.exists():
-        try:
-            with open(USAGE_CACHE_FILE, "r", encoding="utf-8-sig") as f:
-                cache_data = json.load(f)
-                cache_time = datetime.fromisoformat(cache_data.get("timestamp", ""))
-                # 如果缓存未过期（5分钟），直接使用缓存
-                if (datetime.now() - cache_time).total_seconds() <= USAGE_CACHE_TIMEOUT:
-                    return cache_data.get("usage_data")
-        except Exception:
-            # 缓存文件损坏，删除它
-            try:
-                USAGE_CACHE_FILE.unlink()
-            except Exception:
-                pass
+    cache_manager = get_cache_manager()
+    today = datetime.now().strftime("%Y%m%d")
+    
+    # 尝试从缓存获取数据
+    cache_entry = cache_manager.get('usage', f'daily_{today}')
+    if cache_entry is not None:
+        return cache_entry.data
 
     # 如果 npx 不可用，直接返回 None
     if not check_npx_available():
         return None
-
-    # 获取今日日期
-    today = datetime.now().strftime("%Y%m%d")
 
     try:
         # 异步更新缓存 - 不等待结果，直接返回当前缓存或 None
@@ -388,12 +420,16 @@ def get_today_usage():
     except Exception:
         pass
 
-    # 返回当前的缓存数据（如果有的话）
+    # 尝试从旧缓存文件获取数据（向后兼容）
     if USAGE_CACHE_FILE.exists():
         try:
             with open(USAGE_CACHE_FILE, "r", encoding="utf-8-sig") as f:
                 cache_data = json.load(f)
-                return cache_data.get("usage_data")
+                usage_data = cache_data.get("usage_data")
+                if usage_data:
+                    # 迁移到新缓存系统
+                    cache_manager.set('usage', f'daily_{today}', usage_data, 600)
+                    return usage_data
         except Exception:
             pass
 
@@ -496,128 +532,81 @@ def load_platform_config():
 
 def load_platform_cache(platform_name):
     """加载特定平台的缓存数据"""
-    platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
-
-    if not platform_cache_file.exists():
+    cache_manager = get_cache_manager()
+    result = {"balance": None, "subscriptions": None}
+    
+    # 获取余额缓存（TTL: 5分钟）
+    balance_entry = cache_manager.get('balance', f'{platform_name}_balance')
+    if balance_entry:
+        result["balance"] = balance_entry.data
+        log_message(
+            "statusline",
+            "DEBUG", 
+            f"Using {platform_name} balance cache",
+            {"remaining_seconds": balance_entry.remaining_seconds}
+        )
+    
+    # 获取订阅缓存（TTL: 1小时）
+    subscription_entry = cache_manager.get('subscription', f'{platform_name}_subscription')
+    if subscription_entry:
+        result["subscriptions"] = subscription_entry.data
         log_message(
             "statusline",
             "DEBUG",
-            f"No cache file for {platform_name}",
-            {"file": str(platform_cache_file)},
+            f"Using {platform_name} subscription cache",
+            {"remaining_seconds": subscription_entry.remaining_seconds}
         )
-        return {"balance": None, "subscriptions": None}
+    
+    # 向后兼容：尝试从旧缓存文件迁移数据
+    _migrate_legacy_platform_cache(platform_name, result)
+    return result
 
-    try:
-        cache = safe_json_read(platform_cache_file, {})
-        if not cache:
-            log_message("statusline", "DEBUG", f"Empty cache file for {platform_name}")
-            return {"balance": None, "subscriptions": None}
 
-        result = {"balance": None, "subscriptions": None}
-        current_time = datetime.now()
-
-        # 检查余额缓存（5分钟 = 300秒）
-        if cache.get("balance_timestamp"):
-            try:
-                balance_time = datetime.fromisoformat(cache["balance_timestamp"])
-                cache_age = (current_time - balance_time).total_seconds()
-                if cache_age <= 300:  # 5分钟缓存
-                    result["balance"] = cache.get("balance_data")
-                    log_message(
-                        "statusline",
-                        "DEBUG",
-                        f"Using {platform_name} balance cache",
-                        {"cache_age_seconds": cache_age},
-                    )
-                else:
-                    log_message(
-                        "statusline",
-                        "DEBUG",
-                        f"{platform_name} balance cache expired",
-                        {"cache_age_seconds": cache_age},
-                    )
-            except ValueError as e:
-                log_message(
-                    "statusline",
-                    "WARNING",
-                    f"Invalid {platform_name} balance timestamp: {e}",
+def _migrate_legacy_platform_cache(platform_name, result):
+    """迁移旧平台缓存数据到统一缓存系统"""
+    platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
+    if platform_cache_file.exists():
+        try:
+            cache = safe_json_read(platform_cache_file, {})
+            cache_manager = get_cache_manager()
+            
+            # 迁移余额数据
+            if cache.get("balance_data") and not result["balance"]:
+                cache_manager.set('balance', f'{platform_name}_balance', cache["balance_data"], 300)
+                result["balance"] = cache["balance_data"]
+            
+            # 迁移订阅数据
+            if cache.get("subscription_data") and not result["subscriptions"]:
+                cache_manager.set('subscription', f'{platform_name}_subscription', cache["subscription_data"], 3600)
+                result["subscriptions"] = cache["subscription_data"]
+        except Exception as e:
+            log_message(
+                "statusline",
+                "WARNING", 
+                f"Failed to migrate {platform_name} legacy cache: {e}",
                 )
-
-        # 检查订阅缓存
-        if cache.get("subscription_timestamp"):
-            try:
-                subscription_time = datetime.fromisoformat(
-                    cache["subscription_timestamp"]
-                )
-                cache_age = (current_time - subscription_time).total_seconds()
-                if cache_age <= SUBSCRIPTION_CACHE_TIMEOUT:
-                    result["subscriptions"] = cache.get("subscription_data")
-                    log_message(
-                        "statusline",
-                        "DEBUG",
-                        f"Using {platform_name} subscription cache",
-                        {"cache_age_seconds": cache_age},
-                    )
-                else:
-                    log_message(
-                        "statusline",
-                        "DEBUG",
-                        f"{platform_name} subscription cache expired",
-                        {"cache_age_seconds": cache_age},
-                    )
-            except ValueError as e:
-                log_message(
-                    "statusline",
-                    "WARNING",
-                    f"Invalid {platform_name} subscription timestamp: {e}",
-                )
-
-        return result
-    except Exception as e:
-        log_message(
-            "statusline",
-            "ERROR",
-            f"Failed to load {platform_name} cache",
-            {"error": str(e)},
-        )
-        return {"balance": None, "subscriptions": None}
 
 
 def save_platform_cache(platform_name, balance_data=None, subscription_data=None):
-    """保存特定平台的缓存数据（带文件锁定）"""
-    platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
-
+    """保存特定平台的缓存数据（使用统一缓存）"""
+    cache_manager = get_cache_manager()
+    
     try:
-        # 加载现有缓存
-        cache = safe_json_read(platform_cache_file, {})
-        current_time = datetime.now().isoformat()
-
-        # 更新余额数据
+        # 保存余额数据（TTL: 5分钟）
         if balance_data is not None:
-            cache["balance_data"] = balance_data
-            cache["balance_timestamp"] = current_time
-            log_message(
-                "statusline", "DEBUG", f"Updating {platform_name} balance cache"
-            )
+            success = cache_manager.set('balance', f'{platform_name}_balance', balance_data, 300)
+            if success:
+                log_message("statusline", "DEBUG", f"Updated {platform_name} balance cache")
+            else:
+                log_message("statusline", "ERROR", f"Failed to save {platform_name} balance cache")
 
-        # 更新订阅数据
+        # 保存订阅数据（TTL: 1小时）
         if subscription_data is not None:
-            cache["subscription_data"] = subscription_data
-            cache["subscription_timestamp"] = current_time
-            log_message(
-                "statusline", "DEBUG", f"Updating {platform_name} subscription cache"
-            )
-
-        # 安全写入文件（带锁定）
-        success = safe_json_write(platform_cache_file, cache)
-        if success:
-            log_message(
-                "statusline", "DEBUG", f"Successfully saved {platform_name} cache"
-            )
-        else:
-            log_message(
-                "statusline", "ERROR", f"Failed to write {platform_name} cache file"
-            )
+            success = cache_manager.set('subscription', f'{platform_name}_subscription', subscription_data, 3600)
+            if success:
+                log_message("statusline", "DEBUG", f"Updated {platform_name} subscription cache")
+            else:
+                log_message("statusline", "ERROR", f"Failed to save {platform_name} subscription cache")
     except Exception as e:
         log_message(
             "statusline",
@@ -1012,31 +1001,216 @@ def format_platform_data(platform, config, colors):
     return status_parts
 
 
+def detect_statusline_mode(config, session_info):
+    """智能检测状态条运行模式
+    
+    Returns:
+        tuple: (mode, platform_name, confidence)
+        mode: 'multi_platform', 'single_platform', 'basic'
+        platform_name: 检测到的平台名称
+        confidence: 检测置信度 (0.0-1.0)
+    """
+    session_id = session_info.get("session_id")
+    
+    # 模式1: Multi-Platform Mode - 检查Session ID映射
+    if session_id:
+        try:
+            # 检查session-mappings.json文件
+            mapping_file = DATA_DIR / "cache" / "session-mappings.json"
+            if mapping_file.exists():
+                mappings = safe_json_read(mapping_file, {})
+                if session_id in mappings:
+                    mapping_info = mappings[session_id]
+                    detected_platform = mapping_info.get("platform")
+                    if detected_platform:
+                        log_message(
+                            "statusline", "INFO", 
+                            f"Multi-Platform Mode detected via session mapping: {detected_platform}",
+                            {"session_id": session_id, "platform": detected_platform}
+                        )
+                        return ("multi_platform", detected_platform, 1.0)
+            
+            # 检查UUID前缀
+            from data.session_manager import detect_platform_from_session_id
+            prefix_platform = detect_platform_from_session_id(session_id)
+            if prefix_platform:
+                log_message(
+                    "statusline", "INFO", 
+                    f"Multi-Platform Mode detected via UUID prefix: {prefix_platform}",
+                    {"session_id": session_id, "platform": prefix_platform}
+                )
+                return ("multi_platform", prefix_platform, 0.9)
+                
+        except Exception as e:
+            log_message(
+                "statusline", "DEBUG", 
+                f"Session mapping check failed: {e}"
+            )
+    
+    # 模式2: Single Platform Mode - 检查配置的默认平台
+    try:
+        from config import get_config_manager
+        config_manager = get_config_manager()
+        launcher_settings = config_manager.get_launcher_settings()
+        default_platform = launcher_settings.get("default_platform")
+        
+        if default_platform and default_platform != "gaccode":
+            platform_config = config_manager.get_platform(default_platform)
+            if platform_config and platform_config.get("enabled"):
+                # 验证平台有有效的API密钥
+                api_key = config_manager.get_platform_api_key(default_platform)
+                if api_key and api_key.strip():
+                    log_message(
+                        "statusline", "INFO", 
+                        f"Single Platform Mode detected: {default_platform}",
+                        {"default_platform": default_platform}
+                    )
+                    return ("single_platform", default_platform, 0.8)
+    except Exception as e:
+        log_message(
+            "statusline", "DEBUG", 
+            f"Default platform check failed: {e}"
+        )
+    
+    # 模式3: Basic Mode - 检查GAC Code配置
+    try:
+        from config import get_config_manager
+        config_manager = get_config_manager()
+        
+        # 检查是否有任何平台配置了API密钥
+        platforms_config = config_manager.get_platforms()
+        gac_config = platforms_config.get("gaccode", {})
+        gac_api_key = gac_config.get("api_key") or gac_config.get("login_token")
+        
+        if gac_api_key and gac_api_key.strip():
+            log_message(
+                "statusline", "INFO", 
+                "Basic Mode detected - using GAC Code with balance",
+                {"session_id": session_id}
+            )
+            return ("basic", "gaccode", 0.5)
+        else:
+            # 模式4: Zero Configuration Mode - 无任何配置
+            log_message(
+                "statusline", "INFO", 
+                "Zero Configuration Mode detected - no balance display",
+                {"session_id": session_id}
+            )
+            return ("zero_config", "none", 0.3)
+            
+    except Exception as e:
+        log_message(
+            "statusline", "DEBUG", 
+            f"GAC Code config check failed: {e}"
+        )
+        
+    # 默认回退到零配置模式
+    log_message(
+        "statusline", "INFO", 
+        "Zero Configuration Mode detected - fallback",
+        {"session_id": session_id}
+    )
+    return ("zero_config", "none", 0.2)
+
+
+def get_platform_instance_for_mode(mode, platform_name, config, session_info):
+    """根据检测模式获取平台实例
+    
+    Args:
+        mode: 运行模式
+        platform_name: 平台名称
+        config: 配置信息
+        session_info: 会话信息
+        
+    Returns:
+        platform instance or None
+    """
+    try:
+        platform_manager = PlatformManager()
+        
+        if mode == "multi_platform":
+            # Multi-Platform模式：使用完整的平台检测流程
+            platform = platform_manager.detect_platform(session_info, None, config)
+        
+        elif mode == "zero_config":
+            # Zero Configuration模式：不显示余额信息
+            log_message(
+                "statusline", "INFO", 
+                "Zero Configuration Mode - no platform instance needed"
+            )
+            return None
+            
+        elif mode == "single_platform" or mode == "basic":
+            # Single Platform/Basic模式：直接创建指定平台实例
+            from config import get_config_manager
+            config_manager = get_config_manager()
+            
+            # 获取平台API密钥
+            api_key = config_manager.get_platform_api_key(platform_name)
+            platform_config = config_manager.get_platform(platform_name)
+            
+            if platform_config and platform_config.get("enabled"):
+                # 合并配置
+                merged_config = {**config, **platform_config}
+                platform = platform_manager.get_platform_by_name(
+                    platform_name, api_key, merged_config
+                )
+            else:
+                log_message(
+                    "statusline", "WARNING", 
+                    f"Platform {platform_name} not configured or disabled"
+                )
+                platform = None
+        
+        else:
+            platform = None
+            
+        if platform:
+            log_message(
+                "statusline", "INFO", 
+                f"Platform instance created: {platform.name} (mode: {mode})",
+                {"mode": mode, "platform": platform_name}
+            )
+        else:
+            log_message(
+                "statusline", "WARNING", 
+                f"Failed to create platform instance for {platform_name} (mode: {mode})"
+            )
+            
+        return platform
+        
+    except Exception as e:
+        log_message(
+            "statusline", "ERROR", 
+            f"Error creating platform instance: {e}",
+            {"mode": mode, "platform": platform_name}
+        )
+        return None
+
+
 def get_platform_data(config, session_info):
-    """获取平台数据"""
+    """智能获取平台数据 - 支持多种运行模式"""
     if not (config["show_balance"] or config["show_subscription"]):
         return []
     
-    # 从session信息中提取session_id
-    session_id = session_info.get("session_id")
+    # 智能模式检测
+    mode, platform_name, confidence = detect_statusline_mode(config, session_info)
+    
     log_message(
-        "statusline",
-        "DEBUG",
-        "Starting platform detection",
-        {"session_id": session_id},
+        "statusline", "INFO", 
+        f"Statusline mode detected: {mode} ({platform_name}, confidence: {confidence:.1f})",
+        {
+            "mode": mode, 
+            "platform": platform_name, 
+            "confidence": confidence,
+            "session_id": session_info.get("session_id")
+        }
     )
-
-    # 使用平台管理器检测平台
-    platform_manager = PlatformManager()
-    platform = platform_manager.detect_platform(session_info, None, config)
-
+    
+    # 根据模式获取平台实例
+    platform = get_platform_instance_for_mode(mode, platform_name, config, session_info)
+    
     if platform:
-        log_message(
-            "statusline",
-            "INFO",
-            f"Platform detected: {platform.name}",
-            {"session_id": session_id},
-        )
         try:
             return format_platform_data(platform, config, get_color_scheme())
         finally:
@@ -1044,10 +1218,9 @@ def get_platform_data(config, session_info):
             platform.close()
     else:
         log_message(
-            "statusline",
-            "WARNING",
-            "No platform detected",
-            {"session_id": session_id},
+            "statusline", "WARNING", 
+            f"No platform instance available for mode {mode}",
+            {"mode": mode, "platform": platform_name}
         )
         return []
 

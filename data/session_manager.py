@@ -44,9 +44,9 @@ class SessionManager:
             state_file: session状态文件路径，默认使用项目根目录下的.session-state.json
         """
         if state_file is None:
-            # 默认使用项目根目录
+            # 默认使用data/cache目录
             project_root = Path(__file__).parent.parent
-            state_file = project_root / "examples" / ".session-state.json"
+            state_file = project_root / "data" / "cache" / "session-state.json"
 
         self.state_file = state_file
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -396,46 +396,6 @@ def create_session_for_platform(platform: str, continue_session: bool = False) -
     return manager.create_or_continue_session(platform, continue_session)
 
 
-if __name__ == "__main__":
-    # 测试代码
-    import sys
-
-    if len(sys.argv) > 1:
-        action = sys.argv[1]
-
-        if action == "test":
-            # 测试基本功能
-            manager = SessionManager()
-
-            print("=== Session Manager Test ===")
-
-            # 测试生成session ID
-            for platform in ["gaccode", "deepseek", "kimi", "siliconflow"]:
-                session_id = manager.generate_session_id(platform)
-                detected = manager.detect_platform_from_session_id(session_id)
-                print(f"{platform}: {session_id} -> {detected}")
-
-                # 测试保存和读取
-                manager.save_session_state(platform, session_id)
-                last_session = manager.get_last_session_id(platform)
-                print(f"  Saved/Retrieved: {last_session == session_id}")
-
-            print("\n=== Session States ===")
-            states = manager.list_session_states()
-            for platform, state in states.items():
-                print(f"{platform}: {state['last_session_id']} ({state['last_used']})")
-
-        elif action == "cleanup":
-            # 清理测试
-            manager = SessionManager()
-            cleaned = manager.cleanup_old_sessions(0)  # 清理所有
-            print(f"Cleaned {cleaned} session states")
-
-        elif action == "detect" and len(sys.argv) > 2:
-            # 检测测试
-            session_id = sys.argv[2]
-            platform = detect_platform_from_session_id(session_id)
-            print(f"Session ID: {session_id}")
-            print(f"Platform: {platform}")
-    else:
-        print("Usage: python session_manager.py [test|cleanup|detect <session_id>]")
+# 此模块为纯库文件，专注于会话状态管理功能
+# 按照配置驱动架构设计，不提供命令行接口
+# 用户通过修改配置文件和启动脚本管理会话，通过Python接口使用会话功能

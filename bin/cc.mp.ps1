@@ -6,8 +6,9 @@ param(
     [string[]]$Arguments
 )
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Launcher = Join-Path $ScriptDir "launcher.py"
+# 用户可以在这里修改项目路径，默认为脚本的父目录（项目根目录）
+$ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$Launcher = Join-Path $ProjectDir "bin" "launcher.py"
 
 # Check if Python is available
 try {
@@ -23,9 +24,7 @@ if (-not (Test-Path $Launcher)) {
     exit 1
 }
 
-# Capture real current directory and set environment variables
-$env:LAUNCHER_REAL_CWD = (Get-Location)
-$env:LAUNCHER_SCRIPT_DIR = $ScriptDir
+# Pure config-file architecture - no environment variables needed
 
 # Pass all arguments to the Python launcher
 try {

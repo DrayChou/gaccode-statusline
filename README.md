@@ -1,612 +1,311 @@
-# GAC Code Multi-Platform Status Line
+# GAC Code Multi-Platform Status Line v2.0
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
+![Architecture](https://img.shields.io/badge/architecture-Configuration%20Driven-green.svg)
 
-A comprehensive multi-platform statusline for Claude Code that supports GAC Code, Kimi, DeepSeek, SiliconFlow, and Local Proxy APIs. Displays balance, subscription information, and development context in real-time with automatic platform detection.
+**纯配置驱动**的多平台Claude Code状态栏插件，支持GAC Code、Kimi、DeepSeek、SiliconFlow等API平台。通过编辑配置文件即可管理所有功能，无需记忆任何命令。
 
-## ✨ Features
+## ✨ 核心特性
 
-### Multi-Platform Support
-- 🌐 **Multiple API Providers**: GAC Code, Kimi (月之暗面), DeepSeek, SiliconFlow, Local Proxy
-- 🔄 **Auto Platform Detection**: UUID-based session mapping with 100% accuracy
-- 🚀 **Quick Launch Scripts**: Simple alias-based launcher (e.g., `cc.mp.ps1 dp` for DeepSeek)
-- 🔑 **Unified Configuration**: Single configuration file for all platforms
+### 🎯 纯配置驱动设计
+- **零命令记忆** - 用户只需编辑配置文件，系统自动工作
+- **智能模式检测** - 根据配置自动适配四种使用模式
+- **配置文件统一** - 安全的凭证管理，统一配置文件入口
 
-### Real-time Status Display
-- 🔄 **Real-time Updates**: Displays current balance and subscription status
-- 🎨 **Color-coded Status**: Visual indicators for balance and expiry warnings
-- ⚡ **Multi-tier Caching**: 1-second UI refresh, 5-minute balance cache, 1-hour subscription cache
-- 🕒 **Dynamic Multiplier Detection**: API-based multiplier detection with time-based fallback
-- ⚠️ **Smart Warning System**: Red alerts when API/time-based multipliers mismatch
-- 📊 **Rich Context**: Shows model, time, session cost, directory, Git branch
-- 📈 **Usage Tracking**: Today's usage cost with gaming equipment rarity color coding
+### 🌐 多平台支持
+- **GAC Code** - 国内Claude API服务
+- **DeepSeek** - 深度求索AI平台  
+- **Kimi** - 月之暗面Moonshot API
+- **SiliconFlow** - 硅基流动AI平台
+- **Local Proxy** - 本地代理支持
 
-### Advanced Features
-- 🔒 **Secure Management**: Local configuration with automatic sync to plugin
-- 🖥️ **Cross-platform**: Works on Windows, macOS, and Linux
-- 🎯 **Claude Code Integration**: Seamless statusline integration
-- ⚙️ **Fully Configurable**: Customizable display components and layout
-- 💾 **Session Caching**: Caches session information for improved performance
+### 📊 实时状态显示
+- **动态余额显示** - 实时账户余额和订阅信息
+- **会话成本追踪** - 当前会话和今日使用量统计
+- **智能颜色编码** - 余额状态和使用量等级可视化
+- **多重缓存策略** - 1秒UI刷新，5分钟余额缓存，1小时订阅缓存
 
-## 📸 Screenshots
+## 🚀 四种使用模式（自动检测）
 
-**Multi-Platform Display Examples:**
+项目根据配置自动检测并适配相应模式，用户无需手动切换：
 
-```
-# GAC Code - Normal Hours
-Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 Today:$74.47 GAC.B:2692/12000 (45m30s) Dir:myproject Git:main*
+### 1. 零配置模式 (Zero Config Mode)
+- **触发条件**: 无任何API密钥配置
+- **功能特性**: 显示基本会话信息，不显示余额
+- **适用场景**: 快速试用、演示、无API密钥时
 
-# GAC Code - 2x Multiplier Period
-Model:Claude-3.5-Sonnet Time:16:45:15 Cost:$7.50 Today:$149.23 GAC.B:1845/12000 2x (23m15s) Dir:myproject Git:main*
+### 2. 基础模式 (Basic Mode)  
+- **触发条件**: 仅配置GAC Code API密钥
+- **功能特性**: 自动显示GAC Code余额信息
+- **适用场景**: 单一GAC Code用户
 
-# GAC Code - High Multiplier Warning
-Model:Claude-3.5-Sonnet Time:20:30:15 Cost:$15.00 Today:$298.75 GAC.B:1203/12000 !5x (12m42s) Dir:myproject Git:main*
+### 3. 单平台模式 (Single Platform Mode)
+- **触发条件**: 设置了默认平台和对应API密钥
+- **功能特性**: 始终显示指定平台的余额信息
+- **适用场景**: 主要使用一个平台的用户
 
-# DeepSeek
-Model:deepseek-v3.1 Time:13:24:15 Cost:$2.15 Balance:¥45.60/¥100 Dir:myproject Git:main*
+### 4. 多平台模式 (Multi-Platform Mode)
+- **触发条件**: 配置多个平台，使用启动脚本
+- **功能特性**: 根据启动参数显示对应平台余额
+- **适用场景**: 需要在多个平台间切换的用户
 
-# Kimi (月之暗面)  
-Model:moonshot-v1-8k Time:13:24:15 Cost:¥1.85 Balance:¥23.40/¥50 Dir:myproject Git:main*
+## 📦 安装配置
 
-# SiliconFlow
-Model:deepseek-ai/deepseek-v3.1 Time:13:24:15 Cost:$1.95 Balance:$18.75/$30 Dir:myproject Git:main*
-```
+### 前置要求
+- Python 3.7+
+- Claude Code
+- 至少一个支持平台的API密钥
 
-**Color-coded Status Examples:**
-| Status | Balance Display | Multiplier Display | Expires Display |
-|--------|------------------|--------------------|-----------------|
-| 🟢 Healthy | `GAC.B:`<span style="color:green">**3500**</span>`/12000` | <span style="color:yellow">**2x**</span> | `Expires:`<span style="color:green">**09-25(30d)**</span> |
-| 🟡 Warning | `GAC.B:`<span style="color:orange">**750**</span>`/12000` | <span style="color:purple">**5x**</span> | `Expires:`<span style="color:orange">**09-18(10d)**</span> |
-| 🔴 Critical | `GAC.B:`<span style="color:red">**350**</span>`/12000` | <span style="color:red">**!10x**</span> | `Expires:`<span style="color:red">**09-15(3d)**</span> |
+### 快速安装
 
-**Multiplier Color Coding:**
-- 🟢 **Green** (1x): Regular hours
-- 🟡 **Yellow** (2-4x): Medium multiplier periods  
-- 🟣 **Purple** (5x+): High multiplier periods
-- 🔴 **Red** (!Nx): Warning - API data conflicts with time-based detection
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- **Python 3.7+** (Required - now used for unified launcher system)
-- Claude Code installed
-- API access for at least one supported platform
-- Node.js and npm (for usage tracking feature)
-
-### Installation
-
-1. Clone this repository:
+1. **克隆项目**
 ```bash
 git clone https://github.com/DrayChou/gaccode-statusline.git
 cd gaccode-statusline
 ```
 
-2. **🔒 Secure API Key Configuration**:
-
-**Method 1 - Configuration File (Recommended)**:
+2. **初始化配置**
 ```bash
-# Edit the configuration file directly for secure key storage
-# File: examples/launcher-config.json
-# Manually add your API keys to the platforms section
-
-# Verify platform status after configuration
-python platform_manager.py list
+python setup-config.py
 ```
 
-**Security Note**: Always edit configuration files directly rather than using command-line API key input to avoid exposing keys in shell history.
+3. **配置Claude Code状态栏**
 
-**Method 2 - Environment Variables (Advanced)**:
-```bash
-# Set environment variables for secure key storage
-export DEEPSEEK_API_KEY="sk-your-deepseek-key-here"
-export KIMI_API_KEY="sk-your-kimi-key-here"
-export GAC_API_KEY="your-gac-login-token"
-
-# Keys will be automatically detected from environment variables
-python platform_manager.py list
-```
-
-**⚠️ Security Notice**: Never commit real API keys to version control. The `.gitignore` file excludes sensitive configuration files, but always verify before committing.
-
-3. Configure Claude Code statusline in `.claude/settings.json`:
+编辑Claude Code配置文件 `~/.claude/settings.json`:
 ```json
 {
   "statusLine": {
-    "type": "command",
+    "type": "command", 
     "command": "python /path/to/gaccode-statusline/statusline.py",
-    "padding": 1,
     "refreshInterval": 1000
   }
 }
 ```
 
-4. (Optional) Customize display settings:
-```bash
-python config-statusline.py --interactive
-```
+## ⚙️ 配置管理
 
-## 🎯 Unified Multi-Platform Launcher
+### 唯一配置入口
 
-### Architecture Overview
-
-**NEW**: Unified Python launcher system replaces the old dual PowerShell/Bash scripts
-- **Single Implementation**: `launcher.py` contains all launching logic (~300 lines)
-- **Lightweight Wrappers**: Platform-specific scripts are now simple wrappers (30-40 lines each)
-- **90% Maintenance Reduction**: From 2×400+ line scripts to unified codebase
-- **Consistent Behavior**: Identical functionality across all platforms and operating systems
-- **Proper UUID Generation**: Platform-prefixed UUIDs (e.g., `gac00000-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
-- **Enhanced Session Management**: Integrated with SessionManager for `--continue` support
-
-### Quick Launch Scripts
-
-Use any of the convenient launcher interfaces:
-
-**Direct Python Launcher (Cross-platform):**
-```bash
-# Direct usage with all features
-python examples/launcher.py dp --continue
-python examples/launcher.py kimi --continue
-python examples/launcher.py gc --continue
-
-# Dry-run mode for testing configuration
-python examples/launcher.py dp --dry-run
-```
-
-**Wrapper Scripts (Platform-specific convenience):**
-```powershell
-# Windows PowerShell
-.\examples\cc.mp.ps1 dp --continue
-.\examples\cc.mp.ps1 kimi --continue
-.\examples\cc.mp.ps1 gc --continue
-```
-
-```bash
-# Linux/Mac Bash
-./examples/cc.mp.sh dp --continue
-./examples/cc.mp.sh kimi --continue
-./examples/cc.mp.sh gc --continue
-```
-
-```cmd
-# Windows Command Prompt
-examples\cc.mp.bat dp --continue
-examples\cc.mp.bat kimi --continue
-examples\cc.mp.bat gc --continue
-```
-
-### Supported Platforms & Aliases
-
-| Platform | Full Name | Aliases | API Base |
-|----------|-----------|---------|-----------|
-| **gaccode** | GAC Code | `gc` | `https://gaccode.com/api` |
-| **kimi** | Kimi (月之暗面) | - | `https://api.moonshot.cn/v1` |
-| **deepseek** | DeepSeek | `dp`, `ds` | `https://api.deepseek.com` |
-| **siliconflow** | SiliconFlow | `sf` | `https://api.siliconflow.cn/v1` |
-| **local_proxy** | Local Proxy | `lp`, `local` | `http://localhost:7601` |
-
-### Configuration Management
-
-All platform configurations are managed through `examples/launcher-config.json`:
+所有配置通过单一文件管理：`data/config/config.json`
 
 ```json
 {
   "platforms": {
     "gaccode": {
       "name": "GAC Code",
-      "api_base_url": "https://relay05.gaccode.com/claudecode",
-      "api_key": "sk-ant-1234-...",
-      "login_token": "eyJhbGciOiJIUzI1NiIs...",
-      "model": "",
-      "small_model": "",
+      "api_base_url": "https://relay05.gaccode.com/claudecode", 
+      "api_key": "",
       "enabled": true
     },
     "deepseek": {
       "name": "DeepSeek",
       "api_base_url": "https://api.deepseek.com/anthropic",
-      "api_key": "sk-1234...",
-      "model": "deepseek-chat",
-      "small_model": "deepseek-chat",
-      "enabled": true
+      "api_key": "",
+      "enabled": true  
     }
   },
-  "aliases": {
-    "gc": "gaccode",
-    "dp": "deepseek",
-    "ds": "deepseek"
+  "launcher": {
+    "default_platform": "gaccode"
   },
-  "settings": {
-    "default_platform": "gaccode",
-    "plugin_path": "C:\\Users\\dray\\.claude\\scripts\\gaccode.com"
+  "statusline": {
+    "show_balance": true,
+    "show_model": true,
+    "layout": "single_line"
   }
 }
 ```
 
-### How the Unified Launcher Works
+### 安全的凭证管理
 
-1. **Wrapper Execution**: Any wrapper script (`cc.mp.ps1`, `cc.mp.sh`, `cc.mp.bat`) calls the unified Python launcher
-2. **Python Processing**: `launcher.py` handles all logic:
-   - Configuration loading from `examples/launcher-config.json`
-   - Platform alias resolution (e.g., `dp` → `deepseek`)
-   - Platform-prefixed UUID generation (e.g., `gac00000-...`, `deepseek-...`)
-   - Environment variable setup for API keys and endpoints
-   - Session mapping registration with complete platform configuration
-   - Configuration synchronization to plugin directory
-   - Claude Code process launch with custom session ID
-3. **Session Management**: Integrated `--continue` support for resuming previous sessions
-4. **Cross-platform**: Identical behavior on Windows, Linux, and macOS
-
-The statusline plugin uses the session UUID to lookup platform configuration and display appropriate balance information.
-
-**Benefits of Unified Architecture:**
-- **Maintainability**: Single codebase eliminates duplicate logic
-- **Reliability**: Consistent UUID format and session handling
-- **Feature Parity**: All platforms get identical functionality
-- **Easier Testing**: One implementation to test and debug
-
-## 📋 Platform Management Commands
-
-### API Key Management
-```bash
-# Check current API key status (secure - no key exposure)
-python platform_manager.py get-key deepseek
-python platform_manager.py get-key kimi
-python platform_manager.py get-key gaccode
-
-# Security Note: Configure API keys by editing examples/launcher-config.json directly
-# Never use command-line methods that expose keys in shell history
-
-# View API key status
-python platform_manager.py get-key deepseek
-python platform_manager.py get-key dp
-
-# List all platforms
-python platform_manager.py list
-```
-
-### Configuration Management
-```bash
-# Show current statusline configuration
-python config-statusline.py --show
-
-# Interactive configuration wizard
-python config-statusline.py --interactive
-
-# Set specific options
-python config-statusline.py --set show_git_branch true
-python config-statusline.py --set layout multi_line
-```
-
-## ⚙️ Configuration Options
-
-### Statusline Display Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `show_model` | Display AI model name | `true` |
-| `show_time` | Display current time | `true` |
-| `show_session_cost` | Display session cost | `true` |
-| `show_directory` | Display current directory | `true` |
-| `show_git_branch` | Display Git branch status | `true` |
-| `show_balance` | Display account balance | `true` |
-| `show_subscription` | Display subscription info | `true` |
-| `show_today_usage` | Display today's usage cost | `true` |
-| `layout` | `single_line` or `multi_line` | `single_line` |
-
-### Platform-Specific Display
-
-Each platform has its own display format:
-
-- **GAC Code**: USD currency, credit-based balance
-- **DeepSeek**: RMB currency, balance_infos array structure  
-- **Kimi**: RMB currency, Moonshot API format
-- **SiliconFlow**: USD currency, standard balance format
-- **Local Proxy**: Configurable, typically mirrors target platform
-
-## 🎨 Color Coding System
-
-### Balance Status Colors
-- 🟢 **Green**: Healthy balance (sufficient funds)
-- 🟡 **Yellow**: Warning level (moderate funds)  
-- 🔴 **Red**: Critical level (low funds)
-
-### Today's Usage (Gaming Equipment Rarity)
-- 🔴 **Red** ($300+) - Exotic
-- 🟠 **Orange** ($200-$299) - Legendary  
-- 🟣 **Purple** ($100-$199) - Artifact
-- 🟪 **Magenta** ($50-$99) - Epic
-- 🔵 **Blue** ($20-$49) - Rare
-- 🔷 **Light Blue** ($10-$19) - Exceptional
-- 🟢 **Green** ($5-$9) - Fine
-- 🟩 **Light Green** ($2-$4) - Uncommon
-- ⚪ **White** ($0.5-$1.9) - Common
-- ⚫ **Grey** (<$0.5) - Poor
-
-## 🕒 Time-based Multipliers
-
-The statusline supports configurable time-based multipliers for different platforms:
-
+**配置方式：编辑配置文件（统一入口）**
 ```json
 {
-  "multiplier_config": {
-    "enabled": true,
-    "periods": [
-      {
-        "name": "peak_hour",
-        "start_time": "16:30",
-        "end_time": "18:30",
-        "multiplier": 5,
-        "display_text": "5X",
-        "weekdays_only": true,
-        "color": "red"
-      },
-      {
-        "name": "off_peak",
-        "start_time": "01:00", 
-        "end_time": "10:00",
-        "multiplier": 0.8,
-        "display_text": "0.8X",
-        "weekdays_only": false,
-        "color": "green"
-      }
-    ]
+  "platforms": {
+    "gaccode": {
+      "api_key": "sk-your-gac-key",
+      "enabled": true
+    },
+    "deepseek": {
+      "api_key": "sk-your-deepseek-key",
+      "enabled": true
+    }
   }
 }
 ```
 
-## 📈 Usage Tracking
+**配置原则**
+1. 配置文件（唯一配置方式）
+2. 模板系统（快速初始化）
+3. 系统默认（零配置模式）
 
-Integrates with `npx ccusage` for comprehensive usage tracking:
+## 🎯 使用方法
 
-- **Automatic Updates**: Background fetching with timeout protection
-- **Lock Mechanism**: Prevents concurrent updates
-- **Color Coding**: Gaming equipment rarity system
-- **Smart Caching**: Reduces API calls
-
-Enable in configuration:
-```json
-{
-  "show_today_usage": true
-}
+### 基础使用（推荐）
+直接启动Claude Code即可，状态栏将根据配置自动显示相应信息：
+```bash
+claude
 ```
 
-## 🔧 Advanced Features
+### 多平台切换
+当需要使用不同平台时，使用启动脚本：
+```bash
+# 使用DeepSeek平台
+./bin/cc.mp.sh deepseek
 
-### Session UUID Mapping
+# 使用Kimi平台  
+./bin/cc.mp.sh kimi
 
-The system uses an optimized UUID-based session mapping for 100% accurate platform detection:
+# 使用别名
+./bin/cc.mp.sh dp  # DeepSeek
+./bin/cc.mp.sh gc  # GAC Code
+```
 
-**UUID Format Enhancement**:
-- **Old Format**: `00000001-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (8-digit platform prefix)
-- **New Format**: `01xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` (2-digit hex prefix + 6 random digits)
-- **Benefits**: Space-efficient while maintaining UUID compliance
+## 📋 状态栏显示示例
 
-**Platform ID Mapping**:
-- `01`: GAC Code
-- `02`: DeepSeek  
-- `03`: Kimi
-- `04`: SiliconFlow
-- `05`: Local Proxy
+```bash
+# GAC Code - 基础显示
+Model:Claude-3.5-Sonnet Time:13:24:15 Cost:$3.75 GAC.B:2692/12000 Git:main
 
-**Detection Flow**:
-1. **Priority 0 - Session Mappings**: Query `session-mappings.json` for UUID→platform mapping (handles standard UUIDs)
-2. **Priority 1 - Prefix Detection**: Extract 2-digit hex prefix for instant platform identification (O(1) complexity)
-3. **Priority 2 - Configuration**: Use explicit platform_type from config
-4. **Priority 3 - Token Format**: Traditional token analysis (fallback)
-5. **Priority 4 - Default**: Fall back to GAC Code platform
+# DeepSeek - 单平台模式
+Model:deepseek-v3.1 Time:13:24:15 Cost:¥2.15 Balance:¥45.60/¥100 Git:main
 
-**Mapping Process**:
-1. Launcher generates platform-prefixed UUID
-2. Registers complete configuration in `data/cache/session-mappings.json`
-3. Configuration includes: platform, api_key, api_base_url, model, small_model
-4. Statusline performs optimized lookup using session UUID
-5. Displays platform-appropriate balance and subscription information
+# Kimi - 多平台模式
+Model:moonshot-v1-8k Time:13:24:15 Cost:¥1.85 Balance:¥23.40/¥50 Git:main
+```
 
-### Configuration Synchronization
+## 🎨 显示配置
 
-- **Source**: `examples/launcher-config.json` (user-editable)
-- **Target**: `scripts/gaccode.com/launcher-config.json` (plugin reads)
-- **Sync**: Automatic during launcher execution
-- **Mapping**: `examples/session-mappings.json` ↔ `scripts/gaccode.com/session-mappings.json`
+编辑 `data/config/config.json` 中的 `statusline` 部分：
 
-### Multi-tier Caching
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `show_balance` | 显示账户余额 | `true` |
+| `show_model` | 显示AI模型名称 | `true` |
+| `show_directory` | 显示当前目录 | `true` |
+| `show_git_branch` | 显示Git分支 | `true` |
+| `show_time` | 显示当前时间 | `true` |
+| `show_session_cost` | 显示会话成本 | `true` |
+| `layout` | 布局方式 | `"single_line"` |
 
-- **UI Refresh**: 1 second (real-time updates)
-- **Balance Cache**: 5 minutes (API rate limiting)
-- **History Cache**: 5 minutes (multiplier detection)
-- **Subscription Cache**: 1 hour (infrequent changes)
-- **Session Cache**: Persistent until restart
+## 🔧 项目架构
 
-## 🛠️ File Structure
+### 配置驱动架构
+- **配置入口**: `data/config/config.json`
+- **核心模块**: 纯库文件，无CLI接口
+- **启动脚本**: `bin/` 目录，保留必要的CLI接口
+- **配置管理**: 统一配置文件管理所有设置
 
+### 目录结构
 ```
 gaccode-statusline/
-├── statusline.py              # Main statusline script
-├── platform_manager.py       # Unified platform configuration manager
-├── config-statusline.py      # Display configuration tool
-├── platforms/                 # Platform-specific implementations
-│   ├── manager.py            # Platform detection manager
-│   ├── base.py              # Base platform interface
-│   ├── gaccode.py           # GAC Code implementation
-│   ├── kimi.py              # Kimi implementation
-│   ├── deepseek.py          # DeepSeek implementation
-│   └── siliconflow.py       # SiliconFlow implementation
-├── examples/                  # Unified launcher system
-│   ├── launcher.py          # ⭐ NEW: Unified Python launcher (main implementation)
-│   ├── cc.mp.ps1            # ✅ UPDATED: Lightweight PowerShell wrapper (~30 lines)
-│   ├── cc.mp.sh             # ✅ UPDATED: Lightweight Bash wrapper (~30 lines)
-│   ├── cc.mp.bat            # ⭐ NEW: Windows batch wrapper
-│   ├── launcher-config.json # Platform configuration
-│   └── session-mappings.json # Session UUID mappings
-├── data/                      # Runtime data and caching
-│   ├── session_manager.py   # ⭐ NEW: Session state management
-│   ├── config/              # Configuration files
-│   ├── cache/               # Runtime cache files
-│   └── logs/                # Structured logging output
-├── README.md                 # This documentation
-└── LICENSE                  # MIT License
+├── statusline.py          # Claude Code集成入口
+├── data/
+│   ├── config/           # 配置文件目录
+│   ├── cache/            # 运行时缓存
+│   └── logs/             # 结构化日志
+├── bin/                  # 启动脚本
+│   ├── launcher.py      # 统一启动器
+│   ├── cc.mp.sh         # Bash启动脚本
+│   └── cc.mp.ps1        # PowerShell启动脚本  
+├── platforms/           # 平台实现
+├── config.py           # 配置管理（纯库）
+├── cache.py            # 缓存管理（纯库）
+├── session.py          # 会话管理（纯库）
+└── setup-config.py     # 初始化脚本
 ```
 
-### Key Architecture Changes
+## 🔒 安全特性
 
-**Old System** (Maintenance Heavy):
-- `cc.mp.ps1`: 400+ lines of PowerShell logic
-- `cc.mp.sh`: 400+ lines of Bash logic  
-- Duplicated functionality, platform-specific bugs
+- **API密钥保护**: 配置文件gitignore保护，防止意外提交
+- **敏感信息掩码**: 日志和调试输出自动掩码敏感数据
+- **文件权限控制**: 配置文件仅用户可读
+- **版本控制排除**: `.gitignore`自动排除敏感配置
+- **输入验证**: 所有用户输入经过安全验证
 
-**New System** (Unified & Maintainable):
-- `launcher.py`: ~300 lines of unified Python logic
-- `cc.mp.ps1`: ~30 lines PowerShell wrapper
-- `cc.mp.sh`: ~30 lines Bash wrapper
-- `cc.mp.bat`: ~30 lines batch wrapper
-- Single source of truth, consistent behavior
+## 🧪 测试验证
 
-## 🧪 Testing
-
-### Test Individual Components
+### 基础功能测试
 ```bash
-# Test statusline directly
-echo '{}' | python statusline.py
+# 测试状态栏基本功能
+echo '{"session_id":"test"}' | python statusline.py
 
-# Test platform detection
-python -c "from platforms.manager import PlatformManager; print(PlatformManager().list_supported_platforms())"
-
-# Test unified launcher
-python examples/launcher.py --help
-python examples/launcher.py dp --dry-run
-
-# Test wrapper scripts
-.\examples\cc.mp.ps1 --help      # Windows PowerShell
-./examples/cc.mp.sh --help       # Linux/Mac Bash
-examples\cc.mp.bat --help        # Windows CMD
+# 测试平台检测
+echo '{"session_id":"02abcdef-1234-5678-9012-123456789abc"}' | python statusline.py
 ```
 
-### Debug Session Mapping
-```bash
-# Check session mappings
-cat examples/session-mappings.json
-cat session-mappings.json
+### 配置验证
+```bash  
+# 验证配置文件格式
+python -c "import json; print('Config valid:', bool(json.load(open('data/config/config.json'))))"
 
-# Test platform configuration sync
-python platform_manager.py list
+# 测试配置文件加载
+python -c "from config import get_config_manager; cm = get_config_manager(); print('Config loaded:', bool(cm.get_config()))"
 ```
 
-## 🔧 Troubleshooting
+## ❓ 常见问题
 
-### Common Issues
+### Q: 状态栏不显示余额信息？
+**A**: 检查以下几点：
+1. API密钥是否正确配置（通过环境变量或配置文件）
+2. 网络连接是否正常
+3. 平台API服务是否可用
+4. 配置文件格式是否正确
 
-**Statusline not showing platform data:**
-1. Verify API key is set: `python platform_manager.py list`
-2. Check session mapping: Look for your session UUID in `session-mappings.json`
-3. Ensure launcher was used to start Claude Code
-4. Test API connectivity: `python statusline.py`
+### Q: 如何切换到不同的AI平台？
+**A**: 
+1. **临时切换**: 使用启动脚本 `./bin/cc.mp.sh deepseek`
+2. **永久切换**: 编辑配置文件修改 `launcher.default_platform`
 
-**Platform detection failures:**
-1. Verify you used a launcher script (`cc.mp.ps1`, `cc.mp.sh`, `cc.mp.bat`, or direct `launcher.py`)
-2. Check if session UUID exists in mapping file: `cat data/cache/session-mappings.json`
-3. Ensure configuration was synced to plugin directory
-4. Verify Python 3.7+ is available (required for unified launcher)
-5. Test direct launcher: `python examples/launcher.py dp --dry-run`
-6. Check for UTF-8 BOM encoding issues in JSON files
-7. Restart Claude Code if configuration was updated
-
-**Session mapping debugging:**
-```bash
-# Check session mapping file encoding
-python -c "with open('data/cache/session-mappings.json', 'rb') as f: print('BOM detected:' if f.read(3) == b'\xef\xbb\xbf' else 'No BOM')"
-
-# Test UUID prefix detection
-python -c "from data.session_manager import detect_platform_from_session_id; print(detect_platform_from_session_id('01abcdef-1234-5678-9012-123456789abc'))"
-
-# List all session states
-python data/session_manager.py test
+### Q: 如何安全管理API密钥？
+**A**: 编辑配置文件并确保不提交到版本控制：
+```json
+{
+  "platforms": {
+    "gaccode": {
+      "api_key": "your-key",
+      "enabled": true
+    },
+    "deepseek": {
+      "api_key": "your-key",
+      "enabled": true
+    }
+  }
+}
 ```
 
-**API call failures:**
-1. Verify API key is correct and active
-2. Check network connectivity
-3. Ensure API endpoint is accessible
-4. Review platform-specific API documentation
-5. Check for authentication method mismatch (api_key vs auth_token)
-6. Validate API key format and permissions
+### Q: 配置文件在哪里？
+**A**: 所有配置集中在 `data/config/config.json`，这是唯一需要编辑的配置文件。
 
-**Configuration security issues:**
-1. Verify API keys are not logged or exposed in debug output
-2. Check file permissions on configuration files (should be user-readable only)
-3. Ensure sensitive data is masked in logs
-4. Review `.gitignore` coverage for new sensitive files
+## 📈 版本更新
 
-**Display encoding issues:**
-1. Ensure terminal supports UTF-8
-2. On Windows: `chcp 65001`
-3. Check Python locale settings
+### v2.0 重大更新
+- **纯配置驱动架构** - 移除所有不必要的CLI接口
+- **统一配置管理** - 单一配置文件入口
+- **智能模式检测** - 自动适配四种使用模式
+- **增强安全性** - 配置文件保护，敏感信息防泄露
+- **简化用户体验** - 零学习成本，编辑配置即可
 
-### Debug Mode
+### 迁移指南
+从v1.x升级到v2.0：
+1. 停止使用所有 `python xxx.py --command` 形式的命令
+2. 将配置迁移到 `data/config/config.json`
+3. 在配置文件中直接设置API密钥
+4. 移除废弃的配置文件
 
-Enable debug output in `statusline.py`:
-```python
-DEBUG = True  # Set at top of file
-```
+## 🤝 支持与贡献
 
-This will show detailed platform detection and API call information.
+如果您觉得这个项目有帮助，请考虑：
+- ⭐ Star这个仓库
+- 🐛 报告问题和Bug
+- 💡 提出新功能建议
+- 🔧 贡献代码改进
 
-**Security-aware debugging:**
-- Sensitive information (API keys, tokens) is automatically masked in debug output
-- Use `--dry-run` mode for testing without actual API calls
-- Check `data/logs/` for structured logging with security filtering
+## 📄 许可证
 
-```bash
-# View security-filtered logs
-tail -f data/logs/platform-manager.log
-tail -f data/logs/statusline.log
-
-# Test configuration without API calls
-python examples/launcher.py dp --dry-run --debug
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [GAC Code](https://gaccode.com/) for the API service
-- [Claude Code](https://claude.ai/code) for the development environment
-- [DeepSeek](https://www.deepseek.com/) for their API
-- [Kimi (月之暗面)](https://kimi.moonshot.cn/) for their Moonshot API
-- [SiliconFlow](https://siliconflow.cn/) for their API service
-- [ccusage](https://github.com/ryoppippi/ccusage) by ryoppippi for usage tracking
-- All contributors and users who help improve this tool
-
-## 🤝 Support
-
-If you find this project helpful, please consider:
-
-- ⭐ Starring the repository
-- 🐛 Reporting issues
-- 💡 Suggesting new features  
-- 🔧 Contributing code improvements
-- 📝 Improving documentation
-
-## 🔮 Roadmap
-
-### Recently Completed ✅
-- [x] **Unified Launcher Architecture** - Single Python implementation with lightweight wrappers
-- [x] **Platform-prefixed UUIDs** - Proper UUID generation with platform identification
-- [x] **Session Management Integration** - Enhanced `--continue` support
-- [x] **Cross-platform Compatibility** - Consistent behavior on Windows, Linux, macOS
-- [x] **90% Maintenance Reduction** - Eliminated duplicate logic across launcher scripts
-
-### Upcoming Features 🚧
-- [ ] Web dashboard for configuration management
-- [ ] Additional platform integrations (OpenAI, Azure, etc.)
-- [ ] Usage analytics and reporting
-- [ ] Custom alerting and notifications
-- [ ] Plugin marketplace distribution
-- [ ] Launcher GUI for non-technical users
+本项目采用MIT许可证 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-**Disclaimer**: This is an unofficial tool for multi-platform API integration. Not affiliated with Anthropic, GAC Code, DeepSeek, Moonshot AI, or SiliconFlow.
+**设计理念**: 纯配置驱动，无命令依赖。用户只需编辑配置文件，系统自动工作！ 🎉

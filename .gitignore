@@ -4,19 +4,32 @@ api-token.txt
 *.token
 *.secret
 *.credentials
+*.pem
+*.p12
+*.pfx
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
 
 # 配置文件（包含API密钥）
 statusline-config.json
 platform-config.json
 data/config/platform-config.json
 data/config/launcher-config.json
+data/config/config.json
 
-# 会话和缓存文件
+# 会话和缓存文件 - 完整缓存目录排除
 session-info-cache.json
 usage-cache.json
+data/cache/
+data/cache/*
+data/cache/*.json
+data/cache/*.lock
 data/cache/session-info-cache.json
 data/cache/balance-cache-*.json
 data/cache/subscription-cache-*.json
+data/cache/cache_*.json
 data/cache/gac-history-cache.json
 data/cache/gac-multiplier-segments.json
 
@@ -75,10 +88,14 @@ MANIFEST
 ehthumbs.db
 Thumbs.db
 
-# 日志文件（可能包含调试信息）
+# 日志文件（可能包含调试信息）- 完整日志目录排除
 *.log
 logs/
 data/logs/
+data/logs/*
+data/logs/*.log
+data/logs/*.debug
+data/logs/*.trace
 *.debug
 *.trace
 
@@ -103,6 +120,11 @@ test_*.py
 launcher-config.json
 statusline-cache.json
 
+# 启动脚本（已移至bin目录，引导用户使用bin/目录）
+examples/cc.mp.ps1
+examples/cc.mp.sh
+examples/cc.mp.bat
+
 # 备份文件
 *.backup
 *.bak
@@ -116,3 +138,22 @@ statusline-cache.json
 .env
 .env.local
 .env.*.local
+.env.template
+migrate_secrets.sh
+migrate_secrets.ps1
+migrate_secrets.bat
+setup_environment_*.sh
+setup_environment_*.ps1
+setup_environment_*.bat
+
+# 安全审计和迁移文件
+security_audit_report_*.md
+migration_summary_*.md
+config_backup_*.json
+
+# 临时安全文件
+*.tmp
+*.temp
+*_backup_*
+migration_*
+security_*

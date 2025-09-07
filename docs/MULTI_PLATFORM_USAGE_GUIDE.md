@@ -56,25 +56,47 @@ Copy-Item "examples\cc.multi-platform.ps1" "C:\Users\dray\scoop\shims\cc.multi-p
 
 ### 3. 安全配置 API Keys
 
-**推荐方式1：环境变量**（最安全）
+**推荐方式1：配置文件设置**（最安全）
 ```bash
-# 设置环境变量
-export DEEPSEEK_API_KEY="sk-your-actual-deepseek-key"
-export KIMI_API_KEY="sk-your-actual-kimi-key" 
-export GAC_LOGIN_TOKEN="your-actual-gac-token"
-export SILICONFLOW_API_KEY="sk-your-actual-sf-key"
+# 编辑主配置文件
+nano data/config/config.json
 
-# 环境变量会自动被检测，无需手动配置
-# 验证环境变量被正确识别
+# 配置格式示例:
+{
+  "platforms": {
+    "deepseek": {
+      "api_key": "sk-your-actual-deepseek-key",
+      "enabled": true
+    },
+    "kimi": {
+      "auth_token": "sk-your-actual-kimi-key",
+      "enabled": true
+    },
+    "gaccode": {
+      "login_token": "your-actual-gac-token",
+      "enabled": true
+    },
+    "siliconflow": {
+      "api_key": "sk-your-actual-sf-key",
+      "enabled": true
+    }
+  }
+}
+
+# 配置文件会自动被检测，无需手动配置
+# 验证配置文件被正确识别
 python platform_manager.py list
 
 # 安全提醒：不在命令行中直接传递API密钥
 ```
 
-**方式2：配置文件**（推荐）
+**方式2：配置文件模板**（替代方式）
 ```bash
-# 直接编辑 examples/launcher-config.json 文件
-# 在 platforms 节下的对应平台配置 API 密钥
+# 复制配置模板
+cp examples/launcher-config.template.json examples/launcher-config.json
+
+# 编辑模板文件，在 platforms 节下的对应平台配置 API 密钥
+nano examples/launcher-config.json
 
 # 验证配置（敏感信息会被屏蔽）
 python platform_manager.py list
@@ -370,20 +392,20 @@ python platform_manager.py list
 # 注意：为了安全，请手动编辑配置文件设置API key
 ```
 
-### 3. 环境变量冲突
+### 3. 配置文件冲突
 
 **症状**：API 调用使用错误的密钥
 **解决**：
 
-```powershell
-# 清理所有相关环境变量
-$env:ANTHROPIC_API_KEY = $null
-$env:ANTHROPIC_BASE_URL = $null
-$env:MOONSHOT_API_KEY = $null
-$env:DEEPSEEK_API_KEY = $null
+```bash
+# 检查配置文件
+python config.py --get-effective-config
+
+# 编辑配置文件确保正确设置
+nano data/config/config.json
 
 # 重新启动
-.\cc.multi-platform.ps1 -Platform <your-platform>
+python examples/launcher.py <your-platform>
 ```
 
 ## 📈 性能优化

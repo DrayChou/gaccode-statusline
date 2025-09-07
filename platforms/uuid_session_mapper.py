@@ -19,8 +19,10 @@ class UUIDSessionMapper:
 
     def __init__(self):
         self.project_dir = Path(__file__).parent.parent
-        self.mapping_file = self.project_dir / "uuid-session-mapping.json"
-        self.lock_file = self.project_dir / "uuid-mapping.lock"
+        # 使用统一的data/cache目录
+        cache_dir = self.project_dir / "data" / "cache"
+        self.mapping_file = cache_dir / "uuid-session-mapping.json"
+        self.lock_file = cache_dir / "uuid-mapping.lock"
 
     def generate_session_uuid(self) -> str:
         """生成新的session UUID"""

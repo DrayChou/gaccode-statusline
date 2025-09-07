@@ -10,18 +10,29 @@ from datetime import datetime, timezone, timedelta
 import re
 import json
 import os
+import sys
 from pathlib import Path
+
+# Import unified cache manager
+try:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from cache import get_cache_manager
+except ImportError:
+    get_cache_manager = None  # 向后兼容
 
 
 class GACCodePlatform(BasePlatform):
     """GAC Code platform implementation with 30-minute time-segment caching"""
-    
+
     def __init__(self, token: str, config: Dict[str, Any]):
         super().__init__(token, config)
-        self._multiplier_cache_file = Path("data/cache/gac-multiplier-segments.json")
-        self._history_cache_file = Path("data/cache/gac-history-cache.json")
-        self._balance_cache_file = Path("data/cache/balance-cache-gaccode.json")
-        self._subscription_cache_file = Path("data/cache/subscription-cache-gaccode.json")
+        # 使用统一的data目录
+        data_dir = Path(__file__).parent.parent / "data"
+        cache_dir = data_dir / "cache"
+        self._multiplier_cache_file = cache_dir / "gac-multiplier-segments.json"
+        self._history_cache_file = cache_dir / "gac-history-cache.json"
+        self._balance_cache_file = cache_dir / "balance-cache-gaccode.json"
+        self._subscription_cache_file = cache_dir / "subscription-cache-gaccode.json"
         self._ensure_cache_directories()
 
     @property
@@ -35,14 +46,14 @@ class GACCodePlatform(BasePlatform):
     def get_headers(self) -> Dict[str, str]:
         """Get headers for GAC Code API requests"""
         # GAC Code API使用JWT login_token而不是api_key
-        login_token = self.config.get('login_token')
+        login_token = self.config.get("login_token")
         if login_token:
             return {
                 "accept": "*/*",
                 "accept-language": "zh",
                 "authorization": f"Bearer {login_token}",
                 "content-type": "application/json",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
             }
         else:
             # 回退到基础token（虽然可能无效）
@@ -50,9 +61,9 @@ class GACCodePlatform(BasePlatform):
                 "accept": "*/*",
                 "authorization": f"Bearer {self.token}",
                 "content-type": "application/json",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
             }
-    
+
     def detect_platform(self, session_info: Dict[str, Any], token: str) -> bool:
         """Detect GAC Code platform"""
         # 平台检测应该通过session-mappings.json进行，这里只作为fallback
@@ -65,71 +76,103 @@ class GACCodePlatform(BasePlatform):
         """检查缓存文件是否有效"""
         if not cache_file.exists():
             return False
-        
+
         try:
-            with open(cache_file, 'r', encoding='utf-8-sig') as f:
+            with open(cache_file, "r", encoding="utf-8-sig") as f:
                 cache_data = json.load(f)
-            
+
             # 使用内容中的时间戳而不是文件修改时间
-            cached_at_str = cache_data.get('cached_at')
+            cached_at_str = cache_data.get("cached_at")
             if not cached_at_str:
                 return False
-            
+
             cached_at = datetime.fromisoformat(cached_at_str)
             current_time = datetime.now()
             age_seconds = (current_time - cached_at).total_seconds()
-            
+
             return age_seconds < ttl_seconds
         except Exception:
             return False
-    
+
     def _load_cache_data(self, cache_file: Path) -> Optional[Dict[str, Any]]:
         """加载缓存数据"""
         if not cache_file.exists():
             return None
-        
+
         try:
-            with open(cache_file, 'r', encoding='utf-8-sig') as f:
+            with open(cache_file, "r", encoding="utf-8-sig") as f:
                 cache_data = json.load(f)
-            return cache_data.get('data')
+            return cache_data.get("data")
         except Exception:
             return None
-    
-    def _save_cache_data(self, cache_file: Path, data: Dict[str, Any], ttl_seconds: int) -> None:
+
+    def _save_cache_data(
+        self, cache_file: Path, data: Dict[str, Any], ttl_seconds: int
+    ) -> None:
         """保存数据到缓存"""
         try:
             cache_data = {
-                'data': data,
-                'cached_at': datetime.now().isoformat(),
-                'ttl': ttl_seconds
+                "data": data,
+                "cached_at": datetime.now().isoformat(),
+                "ttl": ttl_seconds,
             }
-            with open(cache_file, 'w', encoding='utf-8') as f:
+            with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
         except Exception:
             pass  # 缓存保存失败不影响主流程
-    
+
     def fetch_balance_data(self) -> Optional[Dict[str, Any]]:
         """Fetch balance data from GAC Code API (5分钟缓存，失败时使用过期缓存)"""
-        # 检查缓存是否有效（5分钟 = 300秒）
-        if self._is_cache_valid(self._balance_cache_file, 300):
+        if get_cache_manager is not None:
+            # 使用统一缓存系统
+            cache_manager = get_cache_manager()
+
+            # 尝试从缓存获取数据
+            cache_entry = cache_manager.get("balance", "gaccode_balance")
+            if cache_entry is not None:
+                return cache_entry.data
+
+            # 缓存未命中，调用API
+            api_data = self.make_request("/credits/balance")
+            if api_data:
+                # 保存到缓存（5分钟TTL）
+                cache_manager.set("balance", "gaccode_balance", api_data, 300)
+                return api_data
+
+            # API调用失败，尝试获取过期缓存数据
+            # 注意：统一缓存系统会自动清理过期数据，但我们可以手动检查磁盘文件
+            return self._get_fallback_cache_data()
+        else:
+            # 向后兼容的旧缓存逻辑
+            if self._is_cache_valid(self._balance_cache_file, 300):
+                cached_data = self._load_cache_data(self._balance_cache_file)
+                if cached_data:
+                    return cached_data
+
+            # 缓存无效或不存在，调用API
+            api_data = self.make_request("/credits/balance")
+            if api_data:
+                # 保存到缓存（5分钟TTL）
+                self._save_cache_data(self._balance_cache_file, api_data, 300)
+                return api_data
+
+            # API调用失败，尝试使用过期缓存作为备选方案
             cached_data = self._load_cache_data(self._balance_cache_file)
             if cached_data:
                 return cached_data
-        
-        # 缓存无效或不存在，调用API
-        api_data = self.make_request("/credits/balance")
-        if api_data:
-            # 保存到缓存（5分钟TTL）
-            self._save_cache_data(self._balance_cache_file, api_data, 300)
-            return api_data
-        
-        # API调用失败，尝试使用过期缓存作为备选方案
-        cached_data = self._load_cache_data(self._balance_cache_file)
-        if cached_data:
-            return cached_data
-        
+
         return None
-    
+
+    def _get_fallback_cache_data(self) -> Optional[Dict[str, Any]]:
+        """获取备用缓存数据（即使过期也返回）"""
+        try:
+            cached_data = self._load_cache_data(self._balance_cache_file)
+            if cached_data:
+                return cached_data
+        except Exception:
+            pass
+        return None
+
     def fetch_subscription_data(self) -> Optional[Dict[str, Any]]:
         """Fetch subscription data from GAC Code API (5分钟缓存，失败时使用过期缓存)"""
         # 检查缓存是否有效（5分钟 = 300秒）
@@ -137,161 +180,167 @@ class GACCodePlatform(BasePlatform):
             cached_data = self._load_cache_data(self._subscription_cache_file)
             if cached_data:
                 return cached_data
-        
+
         # 缓存无效或不存在，调用API
         api_data = self.make_request("/subscriptions")
         if api_data:
             # 保存到缓存（5分钟TTL）
             self._save_cache_data(self._subscription_cache_file, api_data, 300)
             return api_data
-        
+
         # API调用失败，尝试使用过期缓存作为备选方案
         cached_data = self._load_cache_data(self._subscription_cache_file)
         if cached_data:
             return cached_data
-        
+
         return None
 
     def _ensure_cache_directories(self) -> None:
         """确保缓存目录存在"""
         self._multiplier_cache_file.parent.mkdir(parents=True, exist_ok=True)
         self._history_cache_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     def _get_time_segment_id(self, dt: datetime = None) -> str:
         """获取30分钟时间段ID
-        
+
         Args:
             dt: 指定时间，默认为当前时间（北京时间）
-            
+
         Returns:
             格式: "YYYY-MM-DD_HH_0" 或 "YYYY-MM-DD_HH_1"
             示例: "2025-09-05_14_0" (14:00-14:30), "2025-09-05_14_1" (14:31-14:59)
         """
         if dt is None:
             dt = datetime.now(timezone(timedelta(hours=8)))  # 北京时间
-        
+
         # 确定时间段：0-30分钟为段0，31-59分钟为段1
         segment = 0 if dt.minute <= 30 else 1
         return f"{dt.strftime('%Y-%m-%d_%H')}_{segment}"
-    
+
     def _load_multiplier_cache(self) -> Dict[str, Any]:
         """加载倍率缓存数据"""
         if not self._multiplier_cache_file.exists():
             return {"segments": {}, "last_updated": None}
-        
+
         try:
-            with open(self._multiplier_cache_file, 'r', encoding='utf-8') as f:
+            with open(self._multiplier_cache_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {"segments": {}, "last_updated": None}
-    
+
     def _save_multiplier_cache(self, cache_data: Dict[str, Any]) -> None:
         """保存倍率缓存数据"""
         try:
-            with open(self._multiplier_cache_file, 'w', encoding='utf-8') as f:
+            with open(self._multiplier_cache_file, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
         except Exception:
             pass  # 缓存保存失败不影响主流程
-    
+
     def _should_update_history_cache(self) -> bool:
         """判断是否需要更新历史缓存（5分钟轮询，基于内容时间戳）"""
         if not self._history_cache_file.exists():
             return True
-        
+
         try:
-            with open(self._history_cache_file, 'r', encoding='utf-8') as f:
+            with open(self._history_cache_file, "r", encoding="utf-8") as f:
                 cache_data = json.load(f)
-            
-            cached_at_str = cache_data.get('cached_at')
+
+            cached_at_str = cache_data.get("cached_at")
             if not cached_at_str:
                 return True
-                
+
             cached_at = datetime.fromisoformat(cached_at_str)
             current_time = datetime.now()
             age_seconds = (current_time - cached_at).total_seconds()
-            
+
             return age_seconds > 300  # 5分钟
         except Exception:
             return True
-    
+
     def fetch_history_data(self, limit: int = 10) -> Optional[Dict[str, Any]]:
         """获取使用历史数据（带5分钟缓存）"""
         # 检查是否需要更新缓存
         if not self._should_update_history_cache():
             try:
-                with open(self._history_cache_file, 'r', encoding='utf-8') as f:
+                with open(self._history_cache_file, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
-                return cached_data.get('data')
+                return cached_data.get("data")
             except Exception:
                 pass  # 缓存读取失败，继续API调用
-        
+
         # 调用API获取最新数据
         api_data = self.make_request(f"/credits/history?limit={limit}")
         if api_data:
             # 更新历史缓存
             try:
                 cache_data = {
-                    'data': api_data,
-                    'cached_at': datetime.now().isoformat(),
-                    'ttl': 300  # 5分钟TTL
+                    "data": api_data,
+                    "cached_at": datetime.now().isoformat(),
+                    "ttl": 300,  # 5分钟TTL
                 }
-                with open(self._history_cache_file, 'w', encoding='utf-8') as f:
+                with open(self._history_cache_file, "w", encoding="utf-8") as f:
                     json.dump(cache_data, f, ensure_ascii=False, indent=2)
             except Exception:
                 pass  # 缓存保存失败不影响返回
-            
+
             # 更新倍率时间段缓存
             self._update_multiplier_segments_from_history(api_data)
             return api_data
-        
+
         # API调用失败，尝试使用已有缓存
         try:
-            with open(self._history_cache_file, 'r', encoding='utf-8') as f:
+            with open(self._history_cache_file, "r", encoding="utf-8") as f:
                 cached_data = json.load(f)
-            return cached_data.get('data')
+            return cached_data.get("data")
         except Exception:
             return None
-    
-    def _update_multiplier_segments_from_history(self, history_data: Dict[str, Any]) -> None:
+
+    def _update_multiplier_segments_from_history(
+        self, history_data: Dict[str, Any]
+    ) -> None:
         """根据历史数据更新倍率时间段缓存"""
-        if not history_data or 'history' not in history_data:
+        if not history_data or "history" not in history_data:
             return
-        
+
         cache_data = self._load_multiplier_cache()
         updated = False
-        
-        for record in history_data['history']:
-            if record.get('reason') != 'usage' or 'details' not in record:
+
+        for record in history_data["history"]:
+            if record.get("reason") != "usage" or "details" not in record:
                 continue
-            
+
             # 解析倍率
-            details = record['details']
-            multiplier_match = re.search(r'Time Multiplier\((\d+)\s*-\s*([^)]+)\)', details)
+            details = record["details"]
+            multiplier_match = re.search(
+                r"Time Multiplier\((\d+)\s*-\s*([^)]+)\)", details
+            )
             if not multiplier_match:
                 continue
-            
+
             multiplier_value = int(multiplier_match.group(1))
-            
+
             # 解析记录时间
             try:
-                created_at = datetime.fromisoformat(record['createdAt'].replace('Z', '+00:00'))
+                created_at = datetime.fromisoformat(
+                    record["createdAt"].replace("Z", "+00:00")
+                )
                 beijing_time = created_at.astimezone(timezone(timedelta(hours=8)))
                 segment_id = self._get_time_segment_id(beijing_time)
-                
+
                 # 更新对应时间段的倍率
-                cache_data['segments'][segment_id] = {
-                    'multiplier': multiplier_value,
-                    'updated_at': datetime.now().isoformat(),
-                    'source_time': beijing_time.isoformat(),
-                    'source': 'api_history'
+                cache_data["segments"][segment_id] = {
+                    "multiplier": multiplier_value,
+                    "updated_at": datetime.now().isoformat(),
+                    "source_time": beijing_time.isoformat(),
+                    "source": "api_history",
                 }
                 updated = True
-                
+
             except Exception:
                 continue  # 解析失败跳过该记录
-        
+
         if updated:
-            cache_data['last_updated'] = datetime.now().isoformat()
+            cache_data["last_updated"] = datetime.now().isoformat()
             self._save_multiplier_cache(cache_data)
 
     def format_balance_display(self, balance_data: Dict[str, Any]) -> str:
@@ -311,7 +360,7 @@ class GACCodePlatform(BasePlatform):
 
             # 检测倍率状态
             multiplier_info = self._detect_multiplier_status()
-            
+
             # 获取下一次刷新时间
             last_refill = balance_data.get("lastRefill")
             next_refill_time = (
@@ -319,12 +368,12 @@ class GACCodePlatform(BasePlatform):
             )
 
             balance_str = f"GAC.B:{color}{balance}{reset}/{credit_cap}"
-            
+
             # 添加倍率指示器
             if multiplier_info["is_active"]:
                 multiplier_value = multiplier_info["value"]
                 is_time_based = multiplier_info["is_time_based"]
-                
+
                 if is_time_based and not self._is_high_multiplier_hours():
                     # API显示倍率但时间段判断为非倍率 - 警告
                     balance_str += f"\033[91m!{multiplier_value}x\033[0m"  # 红色警告(使用!替代⚠避免编码问题)
@@ -337,7 +386,7 @@ class GACCodePlatform(BasePlatform):
                     else:
                         multiplier_color = "\033[92m"  # 绿色 - 低倍率
                     balance_str += f"{multiplier_color}{multiplier_value}x\033[0m"
-            
+
             if next_refill_time != "未知":
                 balance_str += f" ({next_refill_time})"
 
@@ -424,24 +473,24 @@ class GACCodePlatform(BasePlatform):
             return max(0, days_left)
         except:
             return 0
-    
+
     def _get_current_multiplier_from_cache(self) -> Optional[Dict[str, Any]]:
         """从缓存获取当前时间段的倍率"""
         current_segment = self._get_time_segment_id()
         cache_data = self._load_multiplier_cache()
-        
-        segment_info = cache_data.get('segments', {}).get(current_segment)
+
+        segment_info = cache_data.get("segments", {}).get(current_segment)
         if segment_info:
             return {
-                'multiplier': segment_info['multiplier'],
-                'updated_at': segment_info['updated_at'],
-                'source': segment_info.get('source', 'cache')
+                "multiplier": segment_info["multiplier"],
+                "updated_at": segment_info["updated_at"],
+                "source": segment_info.get("source", "cache"),
             }
         return None
-    
+
     def _detect_multiplier_status(self) -> Dict[str, Any]:
         """智能倍率检测（缓存优先 + API补充）
-        
+
         Returns:
             Dict[str, Any]: {
                 "is_active": bool,      # 是否有倍率
@@ -453,67 +502,69 @@ class GACCodePlatform(BasePlatform):
         # 1. 优先从当前时间段缓存获取
         cached_multiplier = self._get_current_multiplier_from_cache()
         if cached_multiplier:
-            multiplier_value = cached_multiplier['multiplier']
+            multiplier_value = cached_multiplier["multiplier"]
             return {
                 "is_active": multiplier_value > 1,
                 "value": multiplier_value,
                 "is_time_based": False,
-                "source": f"segment_cache({cached_multiplier['source']})"
+                "source": f"segment_cache({cached_multiplier['source']})",
             }
-        
+
         # 2. 缓存无数据，触发历史数据获取（会自动更新缓存）
         history_data = self.fetch_history_data(5)
-        
+
         # 3. 再次检查缓存（可能已被更新）
         cached_multiplier = self._get_current_multiplier_from_cache()
         if cached_multiplier:
-            multiplier_value = cached_multiplier['multiplier']
+            multiplier_value = cached_multiplier["multiplier"]
             return {
                 "is_active": multiplier_value > 1,
                 "value": multiplier_value,
                 "is_time_based": False,
-                "source": f"segment_cache_fresh({cached_multiplier['source']})"
+                "source": f"segment_cache_fresh({cached_multiplier['source']})",
             }
-        
+
         # 4. 直接从API历史记录解析（备选方案）
         if history_data and "history" in history_data:
             for record in history_data["history"]:
                 if record.get("reason") == "usage" and "details" in record:
                     details = record["details"]
-                    multiplier_match = re.search(r'Time Multiplier\((\d+)\s*-\s*([^)]+)\)', details)
+                    multiplier_match = re.search(
+                        r"Time Multiplier\((\d+)\s*-\s*([^)]+)\)", details
+                    )
                     if multiplier_match:
                         multiplier_value = int(multiplier_match.group(1))
                         return {
                             "is_active": multiplier_value > 1,
                             "value": multiplier_value,
                             "is_time_based": False,
-                            "source": "api_direct"
+                            "source": "api_direct",
                         }
-        
+
         # 5. 最后回退到传统时间段判断
         if self._is_high_multiplier_hours():
             return {
                 "is_active": True,
                 "value": 2,  # 传统时间段默认倍率
                 "is_time_based": True,
-                "source": "time_fallback"
+                "source": "time_fallback",
             }
-        
+
         return {
             "is_active": False,
             "value": 1,
             "is_time_based": True,
-            "source": "time_fallback"
+            "source": "time_fallback",
         }
-    
+
     def _is_high_multiplier_hours(self) -> bool:
         """判断当前是否为高倍率时段"""
         now = datetime.now(timezone(timedelta(hours=8)))  # 北京时间
-        
+
         # 工作日 (周一到周五)
         if now.weekday() >= 5:  # 周六、周日
             return False
-            
+
         # 高倍率时段: 9:00-12:00, 14:00-18:00
         hour = now.hour
         return (9 <= hour < 12) or (14 <= hour < 18)

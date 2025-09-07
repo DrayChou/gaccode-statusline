@@ -2,9 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚫 CRITICAL ARCHITECTURE RULE: PURE CONFIG-FILE-ONLY
+
+**ABSOLUTE REQUIREMENT**: This project uses **PURE CONFIG-FILE-ONLY** architecture.
+
+### Strict Rules:
+- ❌ **NO environment variables** - All configuration must be in config files
+- ❌ **NO command-line interfaces** - Users edit config files only  
+- ❌ **NO runtime parameter passing** - Everything configured via files
+- ❌ **NO fallback to environment variables** - Config file is the single source of truth
+- ✅ **ONLY config file** - `data/config/config.json` is the sole configuration method
+
+### Code Requirements:
+- Remove ALL `os.environ.get()` calls
+- Remove ALL `export`/`$env:` references from documentation
+- Remove ALL argparse and CLI interfaces from core modules
+- Remove ALL environment variable fallback logic
+- Users configure EVERYTHING by editing `data/config/config.json`
+
 ## Project Overview
 
 GAC Code Multi-Platform Status Line - A comprehensive Claude Code statusline plugin that supports multiple AI API platforms (GAC Code, Kimi, DeepSeek, SiliconFlow, Local Proxy) with real-time balance display, session mapping, and intelligent platform detection.
+
+**Configuration Method**: Users edit `data/config/config.json` file ONLY.
 
 ## Core Architecture
 
@@ -56,7 +76,7 @@ data/
 **Secure API Key Configuration**:
 ```bash
 # Method 1 - Configuration File (Recommended)
-# Manually edit examples/launcher-config.json to add API keys
+# Manually edit data/config/launcher-config.json to add API keys
 # This avoids exposing keys in shell history
 
 # Method 2 - Environment Variables (Advanced)
@@ -89,17 +109,17 @@ python config-statusline.py --set layout multi_line
 ### Platform Launcher Usage
 ```powershell
 # Windows PowerShell - Launch different platforms
-.\examples\cc.mp.ps1 dp           # DeepSeek
-.\examples\cc.mp.ps1 kimi         # Kimi
-.\examples\cc.mp.ps1 sf           # SiliconFlow
-.\examples\cc.mp.ps1 gc           # GAC Code
+.\bin\cc.mp.ps1 dp           # DeepSeek
+.\bin\cc.mp.ps1 kimi         # Kimi
+.\bin\cc.mp.ps1 sf           # SiliconFlow
+.\bin\cc.mp.ps1 gc           # GAC Code
 ```
 
 ```bash
 # Linux/Mac - Launch different platforms  
-./examples/cc.mp.sh dp            # DeepSeek
-./examples/cc.mp.sh kimi          # Kimi
-./examples/cc.mp.sh sf            # SiliconFlow
+./bin/cc.mp.sh dp            # DeepSeek
+./bin/cc.mp.sh kimi          # Kimi
+./bin/cc.mp.sh sf            # SiliconFlow
 ```
 
 ### Testing & Debugging
@@ -125,7 +145,7 @@ tail -f data/logs/platform-manager.log
 tail -f data/logs/statusline.log
 
 # Test launcher in dry-run mode (no API calls)
-python examples/launcher.py dp --dry-run
+python bin/launcher.py dp --dry-run
 ```
 
 ## Critical Architecture Concepts
@@ -139,13 +159,13 @@ python examples/launcher.py dp --dry-run
 **Configuration Search Priority** (Launcher only):
 1. **Current working directory**: `launcher-config.json`
 2. **Caller script directory**: Via `LAUNCHER_SCRIPT_DIR` env var
-3. **Launcher.py directory**: `examples/launcher-config.json`
+3. **Launcher.py directory**: `bin/launcher-config.json`
 4. **Project data/config**: `data/config/launcher-config.json`
 5. **User home directory**: Backup locations
 
 **Synchronization Flow**:
 ```
-User edits: examples/launcher-config.json
+User edits: data/config/launcher-config.json
      ↓
 Launcher finds config (priority-based search)
      ↓  
@@ -175,8 +195,8 @@ StatusLine reads: data/config/platform-config.json
 ### Usage Modes
 
 **Mode 1: Full Launcher Mode** (Recommended)
-- User runs: `./examples/cc.mp.ps1` or `python examples/launcher.py`
-- Configuration: Edit `examples/launcher-config.json`
+- User runs: `./bin/cc.mp.ps1` or `python bin/launcher.py`
+- Configuration: Edit `data/config/launcher-config.json`
 - Sync: Automatic → `data/config/platform-config.json`
 - Features: Platform-prefixed UUIDs, session management, multi-platform support
 
@@ -287,7 +307,7 @@ class PlatformManager:
 ```
 
 ### 3. Add Configuration
-Update `examples/launcher-config.json`:
+Update `data/config/launcher-config.json`:
 ```json
 {
   "platforms": {
@@ -327,12 +347,12 @@ Update `examples/launcher-config.json`:
 
 ### Configuration Sync Issues  
 **Root Cause**: Configuration not properly synced from launcher to plugin
-**Solution**: Launcher scripts automatically sync `examples/launcher-config.json` → `data/config/platform-config.json`
+**Solution**: Launcher scripts automatically sync `data/config/launcher-config.json` → `data/config/platform-config.json`
 
 ## File Organization Patterns
 
 ### Configuration Files
-- **Source**: `examples/launcher-config.json` (user-editable)
+- **Source**: `data/config/launcher-config.json` (user-editable)
 - **Runtime**: `data/config/platform-config.json` (auto-synced)
 - **Session State**: `data/cache/session-*.json` (runtime state)
 
@@ -345,8 +365,8 @@ Update `examples/launcher-config.json`:
 - **Main Statusline**: `statusline.py` (Claude Code integration point)
 - **Configuration**: `config-statusline.py` (display settings management)
 - **Platform Config**: `platform_manager.py` (API key management)
-- **🆕 Unified Launcher**: `examples/launcher.py` (main implementation, ~300 lines)
-- **📦 Wrapper Scripts**: `examples/cc.mp.*` (lightweight wrappers, 30-40 lines each)
+- **🆕 Unified Launcher**: `bin/launcher.py` (main implementation, ~300 lines)
+- **📦 Wrapper Scripts**: `bin/cc.mp.*` (lightweight wrappers, 30-40 lines each)
   - `cc.mp.ps1`: PowerShell wrapper
   - `cc.mp.sh`: Bash wrapper
   - `cc.mp.bat`: Windows CMD wrapper (NEW)

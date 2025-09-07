@@ -395,7 +395,7 @@ class ClaudeLauncher:
 
     def sync_configuration(self, config: Dict[str, Any]):
         """同步配置到插件目录"""
-        plugin_path = Path(config["settings"]["plugin_path"])
+        plugin_path = Path(config.get("settings", {}).get("plugin_path", ""))
         if not plugin_path.is_absolute():
             plugin_path = self.script_dir / plugin_path
 

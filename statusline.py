@@ -799,256 +799,261 @@ def format_basic_status(config, data, colors):
         
     return status_parts
 
-def display_status():
-    """显示状态信息"""
-    # 获取配置和session信息
-    config = load_config()
-    session_info = get_session_info()
-
-    # 收集所有需要的数据
-    data = collect_status_data(config, session_info)
-    colors = get_color_scheme()
-    
-    # 格式化基础状态
-    status_parts = format_basic_status(config, data, colors)
-
-    # 初始化状态栏部分
+def format_session_cost_info(config, session_info, colors):
+    """格式化会话成本信息"""
     status_parts = []
-    secondary_parts = []  # 用于目录和Git信息
-
-    # 颜色定义
-    reset = "\033[0m"
-    green = "\033[32m"  # 绿色 - 模型
-    cyan = "\033[36m"  # 青色 - 目录
-    yellow = "\033[33m"  # 黄色 - Git分支
-    purple = "\033[35m"  # 紫色 - 时间
-    blue = "\033[34m"  # 蓝色 - 会话时长
-    magenta = "\033[95m"  # 洋红色 - Session成本
-
-    # 1. 模型信息
-    if config["show_model"]:
-        status_parts.append(f"Model:{green}{model_name}{reset}")
-
-    # 2. 当前时间
-    if config["show_time"]:
-        status_parts.append(f"Time:{purple}{current_time}{reset}")
-
-    # 3. 会话时长 (如果有的话)
-    if config["show_session_duration"] and session_duration:
-        status_parts.append(f"Duration:{blue}{session_duration}{reset}")
-
-    # 4. Session成本
+    
+    # Session成本
     if config["show_session_cost"]:
         session_cost = format_session_cost(session_info)
         if session_cost:
-            status_parts.append(f"Cost:{magenta}{session_cost}{reset}")
+            status_parts.append(f"Cost:{colors['magenta']}{session_cost}{colors['reset']}")
+    
+    return status_parts
 
-    # 5. 今日使用量
+
+def format_usage_info(config, colors):
+    """格式化今日使用量信息"""
+    status_parts = []
+    
     if config["show_today_usage"]:
         usage_data = get_today_usage()
         if usage_data:
             usage_cost = usage_data.get("total_cost", 0)
             if usage_cost > 0:
-                # 根据使用量设置颜色 - 新10级装备颜色方案
-                if usage_cost >= 300:
-                    usage_color = "\033[38;5;196m"  # 红色 - 不朽 (Exotic) #FF0000
-                elif usage_cost >= 200:
-                    usage_color = "\033[38;5;208m"  # 橙色 - 传说 (Legendary) #FF8C00
-                elif usage_cost >= 100:
-                    usage_color = "\033[38;5;128m"  # 紫色 - 神器 (Artifact) #800080
-                elif usage_cost >= 50:
-                    usage_color = "\033[38;5;201m"  # 品红 - 史诗 (Epic) #FF00FF
-                elif usage_cost >= 20:
-                    usage_color = "\033[38;5;21m"  # 蓝色 - 稀有 (Rare) #0000FF
-                elif usage_cost >= 10:
-                    usage_color = "\033[38;5;117m"  # 浅蓝 - 卓越 (Exceptional) #87CEEB
-                elif usage_cost >= 5:
-                    usage_color = "\033[38;5;34m"  # 绿色 - 精良 (Fine) #008000
-                elif usage_cost >= 2:
-                    usage_color = "\033[38;5;120m"  # 浅绿 - 优秀 (Uncommon) #98E088
-                elif usage_cost >= 0.5:
-                    usage_color = "\033[38;5;255m"  # 白色 - 普通 (Common) #FFFFFF
-                else:
-                    usage_color = "\033[38;5;242m"  # 灰色 - 劣质 (Poor) #6D6D6D
-                status_parts.append(f"Today:{usage_color}${usage_cost:.2f}{reset}")
+                usage_color = get_usage_color(usage_cost)
+                status_parts.append(f"Today:{usage_color}${usage_cost:.2f}{colors['reset']}")
+    
+    return status_parts
 
-    # 6. 目录信息 (放到secondary_parts)
+
+def get_usage_color(usage_cost):
+    """根据使用量返回对应的颜色代码"""
+    if usage_cost >= 300:
+        return "\033[38;5;196m"  # 红色 - 不朽 (Exotic)
+    elif usage_cost >= 200:
+        return "\033[38;5;208m"  # 橙色 - 传说 (Legendary)
+    elif usage_cost >= 100:
+        return "\033[38;5;128m"  # 紫色 - 神器 (Artifact)
+    elif usage_cost >= 50:
+        return "\033[38;5;201m"  # 品红 - 史诗 (Epic)
+    elif usage_cost >= 20:
+        return "\033[38;5;21m"  # 蓝色 - 稀有 (Rare)
+    elif usage_cost >= 10:
+        return "\033[38;5;117m"  # 浅蓝 - 卓越 (Exceptional)
+    elif usage_cost >= 5:
+        return "\033[38;5;34m"  # 绿色 - 精良 (Fine)
+    elif usage_cost >= 2:
+        return "\033[38;5;120m"  # 浅绿 - 优秀 (Uncommon)
+    elif usage_cost >= 0.5:
+        return "\033[38;5;255m"  # 白色 - 普通 (Common)
+    else:
+        return "\033[38;5;242m"  # 灰色 - 劣质 (Poor)
+
+
+def format_secondary_status(config, data, colors):
+    """格式化次要状态信息（目录、Git等）"""
+    secondary_parts = []
+    
+    # 目录信息
     if config["show_directory"]:
-        secondary_parts.append(f"Dir:{cyan}{dir_display}{reset}")
+        secondary_parts.append(f"Dir:{colors['cyan']}{data['dir_display']}{colors['reset']}")
 
-    # 7. Git信息 (放到secondary_parts)
-    if config["show_git_branch"] and git_info:
-        branch_text = f"{git_info['branch']}"
-        if git_info["is_dirty"]:
+    # Git信息
+    if config["show_git_branch"] and data['git_info']:
+        branch_text = f"{data['git_info']['branch']}"
+        if data['git_info']["is_dirty"]:
             branch_text += "*"  # 标记有未提交更改
-        secondary_parts.append(f"Git:{yellow}{branch_text}{reset}")
+        secondary_parts.append(f"Git:{colors['yellow']}{branch_text}{colors['reset']}")
+    
+    return secondary_parts
 
-    # 获取平台 API 数据 (使用新的平台管理器系统)
-    if config["show_balance"] or config["show_subscription"]:
-        # 从session信息中提取session_id
-        session_id = session_info.get("session_id")
+
+def fetch_platform_balance_data(platform, config):
+    """获取平台余额数据"""
+    if not config["show_balance"]:
+        return None
+    
+    cached = load_platform_cache(platform.name)
+    balance_data = cached["balance"]
+    
+    if balance_data is None:
         log_message(
             "statusline",
             "DEBUG",
-            "Starting platform detection",
+            f"Cache miss, fetching balance from {platform.name} API",
+        )
+        try:
+            balance_data = platform.fetch_balance_data()
+            if balance_data:
+                log_message(
+                    "statusline",
+                    "INFO",
+                    f"Successfully fetched {platform.name} balance data",
+                    {
+                        "platform": platform.name,
+                        "balance_data_type": type(balance_data).__name__,
+                        "balance_data_keys": (
+                            list(balance_data.keys())
+                            if isinstance(balance_data, dict)
+                            else "not_dict"
+                        ),
+                    },
+                )
+                save_platform_cache(platform.name, balance_data=balance_data)
+            else:
+                log_message(
+                    "statusline",
+                    "WARNING",
+                    f"{platform.name} API returned empty balance data",
+                    {
+                        "platform": platform.name,
+                        "possible_causes": [
+                            "Invalid API token",
+                            "Network connectivity issues",
+                            "API server errors",
+                            "Rate limiting",
+                        ],
+                    },
+                )
+        except Exception as e:
+            log_message(
+                "statusline",
+                "ERROR",
+                f"{platform.name} balance API call failed",
+                {"error": str(e)},
+            )
+    
+    return balance_data
+
+
+def fetch_platform_subscription_data(platform, config):
+    """获取平台订阅数据"""
+    if not config["show_subscription"]:
+        return None
+    
+    cached = load_platform_cache(platform.name)
+    subscription_data = cached["subscriptions"]
+    
+    if subscription_data is None:
+        log_message(
+            "statusline",
+            "DEBUG",
+            f"Fetching subscription info from {platform.name} API",
+        )
+        try:
+            subscription_data = platform.fetch_subscription_data()
+            if subscription_data:
+                log_message(
+                    "statusline",
+                    "INFO",
+                    f"Successfully fetched {platform.name} subscription data",
+                )
+                save_platform_cache(platform.name, subscription_data=subscription_data)
+        except Exception as e:
+            log_message(
+                "statusline",
+                "ERROR",
+                f"{platform.name} subscription API call failed",
+                {"error": str(e)},
+            )
+    
+    return subscription_data
+
+
+def format_platform_data(platform, config, colors):
+    """格式化平台相关数据显示"""
+    status_parts = []
+    
+    try:
+        # 获取余额数据
+        balance_data = fetch_platform_balance_data(platform, config)
+        if balance_data:
+            try:
+                balance_display = platform.format_balance_display(balance_data)
+                
+                # 如果是GAC Code平台，添加倍数信息
+                if platform.name == "gaccode":
+                    multiplier_info = get_multiplier_info(config)
+                    if multiplier_info["active"]:
+                        multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{colors['reset']}"
+                        balance_display += f" {multiplier_mark}"
+                
+                status_parts.append(balance_display)
+            except Exception as e:
+                log_message(
+                    "statusline",
+                    "ERROR",
+                    f"Failed to format balance display: {e}",
+                )
+                status_parts.append("Balance:Error")
+        
+        # 获取订阅数据
+        subscription_data = fetch_platform_subscription_data(platform, config)
+        if subscription_data:
+            try:
+                subscription_display = platform.format_subscription_display(subscription_data)
+                if subscription_display:  # 只有非空字符串才添加
+                    status_parts.append(subscription_display)
+            except Exception as e:
+                log_message(
+                    "statusline",
+                    "ERROR",
+                    f"Failed to format subscription display: {e}",
+                )
+        
+    except Exception as e:
+        log_message(
+            "statusline",
+            "ERROR",
+            f"Error formatting platform data: {e}",
+        )
+    
+    return status_parts
+
+
+def get_platform_data(config, session_info):
+    """获取平台数据"""
+    if not (config["show_balance"] or config["show_subscription"]):
+        return []
+    
+    # 从session信息中提取session_id
+    session_id = session_info.get("session_id")
+    log_message(
+        "statusline",
+        "DEBUG",
+        "Starting platform detection",
+        {"session_id": session_id},
+    )
+
+    # 使用平台管理器检测平台
+    platform_manager = PlatformManager()
+    platform = platform_manager.detect_platform(session_info, None, config)
+
+    if platform:
+        log_message(
+            "statusline",
+            "INFO",
+            f"Platform detected: {platform.name}",
             {"session_id": session_id},
         )
-
-        # 尝试从配置文件获取token，提供检测用
-        # 平台检测应该基于session_id映射，而不是model信息
-        token_for_detection = None
-
-        # 使用平台管理器检测平台
-        platform_manager = PlatformManager()
-        platform = platform_manager.detect_platform(
-            session_info, token_for_detection, config
+        try:
+            return format_platform_data(platform, config, get_color_scheme())
+        finally:
+            # 确保平台实例被正确关闭
+            platform.close()
+    else:
+        log_message(
+            "statusline",
+            "WARNING",
+            "No platform detected",
+            {"session_id": session_id},
         )
+        return []
 
-        if platform:
-            log_message(
-                "statusline",
-                "INFO",
-                f"Platform detected: {platform.name}",
-                {"session_id": session_id},
-            )
-        else:
-            log_message(
-                "statusline",
-                "WARNING",
-                "No platform detected",
-                {"session_id": session_id},
-            )
 
-        if platform:
-            try:
-                # 使用平台特定的缓存数据
-                cached = load_platform_cache(platform.name)
-                log_message(
-                    "statusline", "DEBUG", f"Checking {platform.name} platform cache"
-                )
-
-                # 获取或更新余额数据
-                if config["show_balance"]:
-                    balance_data = cached["balance"]
-                    if balance_data is None:
-                        log_message(
-                            "statusline",
-                            "DEBUG",
-                            f"Cache miss, fetching balance from {platform.name} API",
-                        )
-                        try:
-                            balance_data = platform.fetch_balance_data()
-                            if balance_data:
-                                log_message(
-                                    "statusline",
-                                    "INFO",
-                                    f"Successfully fetched {platform.name} balance data",
-                                    {
-                                        "platform": platform.name,
-                                        "balance_data_type": type(
-                                            balance_data
-                                        ).__name__,
-                                        "balance_data_keys": (
-                                            list(balance_data.keys())
-                                            if isinstance(balance_data, dict)
-                                            else "not_dict"
-                                        ),
-                                    },
-                                )
-                                save_platform_cache(
-                                    platform.name, balance_data=balance_data
-                                )
-                            else:
-                                log_message(
-                                    "statusline",
-                                    "WARNING",
-                                    f"{platform.name} API returned empty balance data",
-                                    {
-                                        "platform": platform.name,
-                                        "possible_causes": [
-                                            "Invalid API token",
-                                            "Network connectivity issues",
-                                            "API server errors",
-                                            "Rate limiting",
-                                        ],
-                                    },
-                                )
-                        except Exception as e:
-                            log_message(
-                                "statusline",
-                                "ERROR",
-                                f"{platform.name} balance API call failed",
-                                {"error": str(e)},
-                            )
-
-                    if balance_data:
-                        try:
-                            balance_display = platform.format_balance_display(
-                                balance_data
-                            )
-
-                            # 如果是GAC Code平台，添加倍数信息
-                            if platform.name == "gaccode":
-                                multiplier_info = get_multiplier_info(config)
-                                if multiplier_info["active"]:
-                                    multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{reset}"
-                                    balance_display += f" {multiplier_mark}"
-
-                            status_parts.append(balance_display)
-                        except Exception as e:
-                            log_message(
-                                "statusline",
-                                "ERROR",
-                                f"Failed to format balance display: {e}",
-                            )
-                            status_parts.append("Balance:Error")
-
-                # 获取或更新订阅数据
-                if config["show_subscription"]:
-                    subscription_data = cached["subscriptions"]
-                    if subscription_data is None:
-                        log_message(
-                            "statusline",
-                            "DEBUG",
-                            f"Fetching subscription info from {platform.name} API",
-                        )
-                        try:
-                            subscription_data = platform.fetch_subscription_data()
-                            if subscription_data:
-                                log_message(
-                                    "statusline",
-                                    "INFO",
-                                    f"Successfully fetched {platform.name} subscription data",
-                                )
-                                save_platform_cache(
-                                    platform.name, subscription_data=subscription_data
-                                )
-                        except Exception as e:
-                            log_message(
-                                "statusline",
-                                "ERROR",
-                                f"{platform.name} subscription API call failed",
-                                {"error": str(e)},
-                            )
-
-                    if subscription_data:
-                        try:
-                            subscription_display = platform.format_subscription_display(
-                                subscription_data
-                            )
-                            if subscription_display:  # 只有非空字符串才添加
-                                status_parts.append(subscription_display)
-                        except Exception as e:
-                            log_message(
-                                "statusline",
-                                "ERROR",
-                                f"Failed to format subscription display: {e}",
-                            )
-            finally:
-                # 确保平台实例被正确关闭
-                if platform:
-                    platform.close()
-
+def render_status_output(status_parts, secondary_parts, config):
+    """渲染最终的状态输出"""
     # 根据布局配置输出
     if config["layout"] == "multi_line" and secondary_parts:
         print(" ".join(status_parts))
@@ -1080,6 +1085,36 @@ def display_status():
         except Exception as e:
             log_message("statusline", "ERROR", f"Failed to output status: {e}")
             print("Status Error", end="")  # 简单的错误显示
+
+
+def display_status():
+    """显示状态信息"""
+    try:
+        # 获取配置和session信息
+        config = load_config()
+        session_info = get_session_info()
+
+        # 收集所有需要的数据
+        data = collect_status_data(config, session_info)
+        colors = get_color_scheme()
+        
+        # 格式化各部分状态信息
+        status_parts = []
+        status_parts.extend(format_basic_status(config, data, colors))
+        status_parts.extend(format_session_cost_info(config, session_info, colors))
+        status_parts.extend(format_usage_info(config, colors))
+        status_parts.extend(get_platform_data(config, session_info))
+        
+        # 格式化次要状态信息
+        secondary_parts = format_secondary_status(config, data, colors)
+        
+        # 渲染输出
+        render_status_output(status_parts, secondary_parts, config)
+        
+    except Exception as e:
+        log_message("statusline", "ERROR", f"Critical error in display_status: {e}")
+        print("Status Error", end="")
+
 
 
 if __name__ == "__main__":

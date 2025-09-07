@@ -8,16 +8,25 @@ from abc import ABC, abstractmethod
 import json
 from typing import Dict, Any, Optional
 import requests
+import time
+from functools import wraps
 
 
 class BasePlatform(ABC):
-    """Base platform interface for API balance queries"""
+    """Base platform interface for API balance queries with retry and rate limiting"""
 
     def __init__(self, token: str, config: Dict[str, Any]):
         self.token = token
         self.config = config
         self._session = requests.Session()
         self._session_closed = False
+        
+        # Rate limiting and retry configuration
+        self._last_request_time = 0
+        self._min_request_interval = config.get('rate_limit_interval', 1.0)  # seconds
+        self._max_retries = config.get('max_retries', 3)
+        self._retry_delay = config.get('retry_delay', 2.0)  # seconds
+        self._backoff_multiplier = config.get('backoff_multiplier', 2.0)
 
     def __enter__(self):
         """Context manager entry"""
@@ -85,166 +94,178 @@ class BasePlatform(ABC):
             "content-type": "application/json",
         }
 
+    def _rate_limit(self):
+        """Apply rate limiting to API requests"""
+        elapsed = time.time() - self._last_request_time
+        if elapsed < self._min_request_interval:
+            sleep_time = self._min_request_interval - elapsed
+            time.sleep(sleep_time)
+        self._last_request_time = time.time()
+    
+    def _should_retry(self, exception: Exception, attempt: int) -> bool:
+        """Determine if request should be retried based on exception type and attempt count"""
+        if attempt >= self._max_retries:
+            return False
+        
+        # Retry on specific exceptions
+        retryable_exceptions = (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError,
+        )
+        
+        if isinstance(exception, requests.exceptions.HTTPError):
+            # Retry on specific HTTP status codes
+            if hasattr(exception, 'response') and exception.response:
+                status_code = exception.response.status_code
+                # Retry on rate limiting (429) and server errors (5xx)
+                return status_code == 429 or 500 <= status_code < 600
+        
+        return isinstance(exception, retryable_exceptions)
+    
+    def _calculate_retry_delay(self, attempt: int) -> float:
+        """Calculate delay before next retry using exponential backoff"""
+        return self._retry_delay * (self._backoff_multiplier ** attempt)
+
     def make_request(self, endpoint: str, timeout: int = 5) -> Optional[Dict[str, Any]]:
-        """Make API request with error handling"""
+        """Make API request with retry mechanism and rate limiting"""
         from data.logger import log_message
 
+        # Check if session is still available
+        if self._session_closed or not self._session:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR", 
+                "Cannot make request: session is closed"
+            )
+            return None
+        
+        url = f"{self.api_base}{endpoint}"
+        headers = self.get_headers()
+        
         log_message(
             f"{self.name}-platform",
             "DEBUG",
-            "Starting API request",
+            "Starting API request with retry mechanism",
             {
                 "platform": self.name,
                 "endpoint": endpoint,
-                "full_url": f"{self.api_base}{endpoint}",
+                "full_url": url,
                 "timeout": timeout,
+                "max_retries": self._max_retries,
             },
         )
-
-        try:
-            # Check if session is still available
-            if self._session_closed or not self._session:
-                log_message(
-                    f"{self.name}-platform",
-                    "ERROR", 
-                    "Cannot make request: session is closed"
-                )
-                return None
-            
-            url = f"{self.api_base}{endpoint}"
-            headers = self.get_headers()
-
-            log_message(
-                f"{self.name}-platform",
-                "DEBUG",
-                "API request details",
-                {
-                    "platform": self.name,
-                    "url": url,
-                    "headers_keys": list(headers.keys()),
-                    "timeout": timeout,
-                },
-            )
-
-            response = self._session.get(url, headers=headers, timeout=timeout)
-
-            log_message(
-                f"{self.name}-platform",
-                "DEBUG",
-                "API response received",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "status_code": response.status_code,
-                    "response_headers_keys": list(response.headers.keys()),
-                },
-            )
-
-            response.raise_for_status()
-
+        
+        last_exception = None
+        
+        for attempt in range(self._max_retries + 1):
             try:
-                json_data = response.json()
+                # Apply rate limiting
+                self._rate_limit()
+                
                 log_message(
                     f"{self.name}-platform",
-                    "INFO",
-                    "API JSON parsing successful",
+                    "DEBUG",
+                    f"API request attempt {attempt + 1}/{self._max_retries + 1}",
                     {
                         "platform": self.name,
-                        "endpoint": endpoint,
-                        "response_type": type(json_data).__name__,
-                        "response_keys": (
-                            list(json_data.keys())
-                            if isinstance(json_data, dict)
-                            else "not_dict"
-                        ),
+                        "url": url,
+                        "headers_keys": list(headers.keys()),
+                        "timeout": timeout,
                     },
                 )
-                return json_data
-            except json.JSONDecodeError as json_error:
+
+                response = self._session.get(url, headers=headers, timeout=timeout)
+
                 log_message(
                     f"{self.name}-platform",
-                    "ERROR",
-                    "API JSON parsing failed",
+                    "DEBUG",
+                    "API response received",
                     {
                         "platform": self.name,
                         "endpoint": endpoint,
                         "status_code": response.status_code,
-                        "response_text": response.text[:200],
-                        "json_error": str(json_error),
+                        "attempt": attempt + 1,
                     },
                 )
-                return None
 
-        except requests.exceptions.Timeout as timeout_error:
+                response.raise_for_status()
+
+                # Success - parse JSON and return
+                try:
+                    json_data = response.json()
+                    log_message(
+                        f"{self.name}-platform",
+                        "INFO",
+                        "API request successful",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "response_type": type(json_data).__name__,
+                            "attempt": attempt + 1,
+                            "response_keys": (
+                                list(json_data.keys())
+                                if isinstance(json_data, dict)
+                                else "not_dict"
+                            ),
+                        },
+                    )
+                    return json_data
+                except json.JSONDecodeError as json_error:
+                    log_message(
+                        f"{self.name}-platform",
+                        "ERROR",
+                        "API JSON parsing failed",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "status_code": response.status_code,
+                            "response_text": response.text[:200],
+                            "json_error": str(json_error),
+                        },
+                    )
+                    return None
+
+            except Exception as e:
+                last_exception = e
+                
+                # Check if we should retry
+                if not self._should_retry(e, attempt):
+                    break
+                
+                # Calculate delay before retry
+                if attempt < self._max_retries:
+                    delay = self._calculate_retry_delay(attempt)
+                    log_message(
+                        f"{self.name}-platform",
+                        "WARNING",
+                        f"Request failed, retrying in {delay:.1f}s",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "attempt": attempt + 1,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "retry_delay": delay,
+                        },
+                    )
+                    time.sleep(delay)
+                else:
+                    break
+        
+        # All retries exhausted - log final error
+        if last_exception:
             log_message(
                 f"{self.name}-platform",
                 "ERROR",
-                "API request timeout",
+                f"API request failed after {self._max_retries + 1} attempts",
                 {
                     "platform": self.name,
                     "endpoint": endpoint,
-                    "timeout": timeout,
-                    "error": str(timeout_error),
+                    "final_error": str(last_exception),
+                    "error_type": type(last_exception).__name__,
                 },
             )
-            return None
+        
+        return None
 
-        except requests.exceptions.ConnectionError as conn_error:
-            log_message(
-                f"{self.name}-platform",
-                "ERROR",
-                "API connection error",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "url": url,
-                    "error": str(conn_error),
-                },
-            )
-            return None
-
-        except requests.exceptions.HTTPError as http_error:
-            log_message(
-                f"{self.name}-platform",
-                "ERROR",
-                "API HTTP error",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "status_code": (
-                        http_error.response.status_code
-                        if http_error.response
-                        else "unknown"
-                    ),
-                    "error": str(http_error),
-                },
-            )
-            return None
-
-        except requests.RequestException as req_error:
-            log_message(
-                f"{self.name}-platform",
-                "ERROR",
-                "API request exception",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "error_type": type(req_error).__name__,
-                    "error": str(req_error),
-                },
-            )
-            return None
-
-        except Exception as e:
-            log_message(
-                f"{self.name}-platform",
-                "ERROR",
-                "API unexpected exception",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                },
-            )
-            return None

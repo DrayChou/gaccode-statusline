@@ -20,7 +20,7 @@ import shutil
 import subprocess
 import argparse
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Protocol
 from datetime import datetime
 
 # Add data directory to path for imports
@@ -37,6 +37,117 @@ except ImportError as e:
         "Please ensure the data/ directory contains session_manager.py, logger.py, and file_lock.py"
     )
     sys.exit(1)
+
+
+# 依赖注入接口定义
+class FileSystemProvider(Protocol):
+    """文件系统操作接口"""
+    def read_json(self, path: Path) -> Dict[str, Any]: ...
+    def write_json(self, path: Path, data: Dict[str, Any]) -> bool: ...
+    def exists(self, path: Path) -> bool: ...
+    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None: ...
+
+
+class ProcessProvider(Protocol):
+    """进程执行接口"""
+    def run_subprocess(self, args: List[str], **kwargs) -> subprocess.CompletedProcess: ...
+    def popen(self, args: List[str], **kwargs) -> subprocess.Popen: ...
+
+
+class LoggerProvider(Protocol):
+    """日志记录接口"""
+    def log(self, level: str, message: str, extra_data: Dict[str, Any] = None) -> None: ...
+
+
+# 默认实现
+class DefaultFileSystemProvider:
+    """默认文件系统提供者"""
+    def read_json(self, path: Path) -> Dict[str, Any]:
+        try:
+            with open(path, "r", encoding="utf-8-sig") as f:
+                return json.load(f)
+        except UnicodeDecodeError:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    
+    def write_json(self, path: Path, data: Dict[str, Any]) -> bool:
+        return safe_json_write(path, data)
+    
+    def exists(self, path: Path) -> bool:
+        return path.exists()
+    
+    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None:
+        path.mkdir(parents=parents, exist_ok=exist_ok)
+
+
+class DefaultProcessProvider:
+    """默认进程提供者"""
+    def run_subprocess(self, args: List[str], **kwargs) -> subprocess.CompletedProcess:
+        return subprocess.run(args, **kwargs)
+    
+    def popen(self, args: List[str], **kwargs) -> subprocess.Popen:
+        return subprocess.Popen(args, **kwargs)
+
+
+class DefaultLoggerProvider:
+    """默认日志提供者"""
+    def __init__(self, script_dir: Path):
+        self.script_dir = script_dir
+        self.logger_script = script_dir.parent / "data" / "logger.py"
+    
+    def log(self, level: str, message: str, extra_data: Dict[str, Any] = None) -> None:
+        # 屏蔽敏感信息
+        safe_message = self._mask_sensitive_data(message)
+        safe_extra_data = self._mask_sensitive_dict(extra_data or {})
+
+        # 使用Python日志系统
+        log_message("launcher", level, safe_message, safe_extra_data)
+
+        # 同时输出到控制台
+        color = {
+            "ERROR": Colors.RED,
+            "WARNING": Colors.YELLOW,
+            "INFO": Colors.CYAN,
+            "DEBUG": Colors.GRAY,
+        }.get(level, Colors.NC)
+
+        print(Colors.colorize(safe_message, color))
+    
+    def _mask_sensitive_data(self, text: str) -> str:
+        """屏蔽文本中的敏感信息"""
+        import re
+        patterns = [
+            (r"sk-[a-zA-Z0-9\-]{30,100}", lambda m: f"sk-***{m.group()[-4:]}"),
+            (r"Bearer [a-zA-Z0-9+/=]{20,}", lambda m: f"Bearer ***{m.group().split()[-1][-4:]}"),
+            (r"eyJ[a-zA-Z0-9+/=]{20,}", lambda m: f"jwt-***{m.group()[-4:]}"),
+        ]
+        result = text
+        for pattern, replacement in patterns:
+            result = re.sub(pattern, replacement, result)
+        return result
+    
+    def _mask_sensitive_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """屏蔽字典中的敏感信息"""
+        if not isinstance(data, dict):
+            return data
+        
+        sensitive_keys = {
+            "api_key", "auth_token", "login_token", "password", "secret",
+            "private_key", "access_token", "refresh_token"
+        }
+        
+        masked = {}
+        for key, value in data.items():
+            if any(sensitive in key.lower() for sensitive in sensitive_keys):
+                if isinstance(value, str) and len(value) > 4:
+                    masked[key] = f"***{value[-4:]}"
+                else:
+                    masked[key] = "***"
+            elif isinstance(value, dict):
+                masked[key] = self._mask_sensitive_dict(value)
+            else:
+                masked[key] = value
+        return masked
 
 
 class Colors:
@@ -68,94 +179,28 @@ class Colors:
 
 
 class ClaudeLauncher:
-    """Claude Code多平台启动器"""
+    """Claude Code多平台启动器（支持依赖注入）"""
 
-    def __init__(self):
-        self.script_dir = Path(__file__).parent
+    def __init__(
+        self, 
+        fs_provider: Optional[FileSystemProvider] = None,
+        process_provider: Optional[ProcessProvider] = None,
+        logger_provider: Optional[LoggerProvider] = None,
+        script_dir: Optional[Path] = None
+    ):
+        self.script_dir = script_dir or Path(__file__).parent
         self.config_file = self.script_dir / "launcher-config.json"
         self.session_mapping_file = self.script_dir / "session-mappings.json"
 
-        # 日志系统
-        self.logger_script = self.script_dir.parent / "data" / "logger.py"
+        # 注入依赖或使用默认实现
+        self.fs = fs_provider or DefaultFileSystemProvider()
+        self.process = process_provider or DefaultProcessProvider()
+        self.logger = logger_provider or DefaultLoggerProvider(self.script_dir)
 
     def log(self, level: str, message: str, extra_data: Dict[str, Any] = None):
-        """统一日志记录 - 自动屏蔽敏感信息"""
-        # 屏蔽敏感信息
-        safe_message = self._mask_sensitive_data(message)
-        safe_extra_data = self._mask_sensitive_dict(extra_data or {})
+        """统一日志记录 - 通过注入的logger提供者"""
+        self.logger.log(level, message, extra_data)
 
-        # 使用Python日志系统
-        log_message("launcher", level, safe_message, safe_extra_data)
-
-        # 同时输出到控制台
-        color = {
-            "ERROR": Colors.RED,
-            "WARNING": Colors.YELLOW,
-            "INFO": Colors.CYAN,
-            "DEBUG": Colors.GRAY,
-        }.get(level, Colors.NC)
-
-        print(Colors.colorize(safe_message, color))
-
-    def _mask_sensitive_data(self, text: str) -> str:
-        """屏蔽文本中的敏感信息"""
-        import re
-
-        # API密钥模式 (sk-xxx, Bearer xxx)
-        patterns = [
-            (
-                r"sk-[a-zA-Z0-9\-]{30,100}",
-                lambda m: f"sk-***{m.group()[-4:]}",
-            ),  # 包含-字符
-            (
-                r"Bearer [a-zA-Z0-9+/=]{20,}",
-                lambda m: f"Bearer ***{m.group().split()[-1][-4:]}",
-            ),
-            (
-                r"eyJ[a-zA-Z0-9+/=._\-]{40,}",
-                lambda m: f"***{m.group()[-8:]}",
-            ),  # JWT tokens
-            (
-                r'"api_key":\s*"[^"]{10,}"',
-                lambda m: f'"api_key": "***{m.group().split('"')[-2][-4:]}"',
-            ),
-            (
-                r'"auth_token":\s*"[^"]{10,}"',
-                lambda m: f'"auth_token": "***{m.group().split('"')[-2][-4:]}"',
-            ),
-            (
-                r'"login_token":\s*"[^"]{10,}"',
-                lambda m: f'"login_token": "***{m.group().split('"')[-2][-4:]}"',
-            ),
-        ]
-
-        result = text
-        for pattern, replacement in patterns:
-            result = re.sub(pattern, replacement, result)
-
-        return result
-
-    def _mask_sensitive_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """屏蔽字典中的敏感信息"""
-        if not data:
-            return data
-
-        safe_data = {}
-        sensitive_keys = {"api_key", "auth_token", "login_token", "password", "secret"}
-
-        for key, value in data.items():
-            if (
-                key.lower() in sensitive_keys
-                and isinstance(value, str)
-                and len(value) > 4
-            ):
-                safe_data[key] = f"***{value[-4:]}"
-            elif isinstance(value, dict):
-                safe_data[key] = self._mask_sensitive_dict(value)
-            else:
-                safe_data[key] = value
-
-        return safe_data
 
     def print_header(self):
         """打印启动器头部信息"""
@@ -206,117 +251,59 @@ class ClaudeLauncher:
             return None
 
     def load_config(self) -> Dict[str, Any]:
-        """加载配置文件 - 简化为2层查找"""
-        # 简化的查找逻辑：只有2个查找位置
-        # 1. 用户当前工作目录 (优先级最高)
+        """加载配置文件 - 真正的2层查找"""
+        # 简化的查找逻辑：真正只有2个查找位置
+        # 1. 用户工作目录 (优先级最高) 
         # 2. 项目默认配置目录 (fallback)
         
         search_paths = []
 
-        # 1. 真实的用户工作目录 (在Push-Location之前捕获) - 添加安全验证
+        # Layer 1: 用户工作目录（优先）
+        # 尝试获取真实的用户工作目录
+        user_dir = None
         real_cwd = os.environ.get("LAUNCHER_REAL_CWD")
         if real_cwd:
-            validated_cwd = self._validate_path(
-                real_cwd, "LAUNCHER_REAL_CWD environment variable"
-            )
+            validated_cwd = self._validate_path(real_cwd, "LAUNCHER_REAL_CWD environment variable")
             if validated_cwd:
-                search_paths.append(
-                    ("User working directory", validated_cwd / "launcher-config.json")
-                )
-        else:
-            # Fallback: 使用当前目录（可能已被Push-Location改变）
-            current_dir = Path.cwd()
-            search_paths.append(
-                ("Current directory (fallback)", current_dir / "launcher-config.json")
-            )
+                user_dir = validated_cwd
+        
+        # 如果无法获取真实目录，使用当前目录
+        if not user_dir:
+            user_dir = Path.cwd()
+        
+        search_paths.append(("User working directory", user_dir / "launcher-config.json"))
 
-        # 2. 调用脚本所在目录 (通过环境变量传递) - 添加安全验证
-        script_dir = os.environ.get("LAUNCHER_SCRIPT_DIR")
-        if script_dir:
-            validated_script_dir = self._validate_path(
-                script_dir, "LAUNCHER_SCRIPT_DIR environment variable"
-            )
-            if validated_script_dir:
-                # 避免与真实工作目录重复
-                real_current_dir = Path(real_cwd) if real_cwd else Path.cwd()
-                if validated_script_dir != real_current_dir:
-                    search_paths.append(
-                        (
-                            "Caller script directory",
-                            validated_script_dir / "launcher-config.json",
-                        )
-                    )
-
-        # 3. 项目data/config目录 (系统运行时配置，优先级高)
-        data_config_dir = self.script_dir.parent / "data" / "config"
-        search_paths.append(
-            ("Project data/config directory", data_config_dir / "launcher-config.json")
-        )
-
-        # 4. launcher.py所在目录 (examples/ - 模板配置，最低优先级)
-        real_current_dir = Path(real_cwd) if real_cwd else Path.cwd()
-        caller_script_dir = Path(script_dir) if script_dir else None
-        if self.script_dir not in [real_current_dir, caller_script_dir]:
-            search_paths.append(
-                (
-                    "Launcher.py directory (examples template)",
-                    self.script_dir / "launcher-config.json",
-                )
-            )
-
-        # 备用路径：用户主目录
-        user_config_paths = [
-            Path.home()
-            / ".claude"
-            / "scripts"
-            / "gaccode.com"
-            / "data"
-            / "config"
-            / "launcher-config.json",
-            Path.home()
-            / ".claude"
-            / "scripts"
-            / "gaccode.com"
-            / "examples"
-            / "launcher-config.json",
-        ]
-
-        for backup_path in user_config_paths:
-            search_paths.append(("User directory backup", backup_path))
-
-        possible_paths = [path for _, path in search_paths]
+        # Layer 2: 项目数据配置目录（fallback）
+        project_config_dir = self.script_dir.parent / "data" / "config"
+        search_paths.append(("Project config directory", project_config_dir / "launcher-config.json"))
 
         # 查找配置文件
-        config_found = False
-        for i, (description, path) in enumerate(search_paths, 1):
+        for description, path in search_paths:
             if path.exists():
                 self.config_file = path
-                # 设置对应的session mapping文件位置
+                # 设置session mapping文件位置
                 if path.parent.name == "config":
-                    # 如果在data/config目录下，session映射文件在data/cache下
-                    self.session_mapping_file = (
-                        path.parent.parent / "cache" / "session-mappings.json"
-                    )
+                    # data/config目录下，session映射文件在data/cache下
+                    self.session_mapping_file = path.parent.parent / "cache" / "session-mappings.json"
                 else:
-                    # 否则在同目录下
+                    # 其他位置，在同目录下
                     self.session_mapping_file = path.parent / "session-mappings.json"
 
-                print(
-                    Colors.colorize(
-                        f"Using config from {description}: {path}", Colors.GRAY
-                    )
-                )
-                config_found = True
+                print(Colors.colorize(f"Using config from {description}: {path}", Colors.GRAY))
                 break
-
-        if not config_found:
-            self.log(
-                "ERROR", f"Configuration file not found in any of these locations:"
-            )
+        else:
+            # 未找到配置文件，使用默认配置
+            self.log("WARNING", f"Configuration file not found in search paths:")
             for i, (description, path) in enumerate(search_paths, 1):
                 print(f"  {i}. {description}: {path}")
-            sys.exit(1)
+            self.log("INFO", "Using default configuration")
+            
+            # 设置默认配置文件位置（用于后续保存）
+            self.config_file = search_paths[1][1]  # 使用项目配置目录
+            self.session_mapping_file = self.config_file.parent.parent / "cache" / "session-mappings.json"
+            return self.get_default_config()
 
+        # 加载配置文件
         try:
             # 尝试UTF-8-sig编码以处理BOM
             try:
@@ -327,9 +314,8 @@ class ClaudeLauncher:
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     return json.load(f)
         except FileNotFoundError:
-            self.log("WARNING", f"Configuration file not found: {self.config_file}")
-            self.log("INFO", "Using default configuration")
-            return self.get_default_config()
+            self.log("ERROR", f"Configuration file not found: {self.config_file}")
+            sys.exit(1)
         except json.JSONDecodeError as e:
             self.log("ERROR", f"Invalid JSON in configuration file: {e}")
             self.log("ERROR", f"Please check {self.config_file} for syntax errors")
@@ -338,8 +324,8 @@ class ClaudeLauncher:
             self.log("ERROR", f"Permission denied accessing: {self.config_file}")
             self.log("ERROR", "Please check file permissions")
             sys.exit(1)
-        except Exception as e:
-            self.log("ERROR", f"Unexpected error loading configuration: {e}")
+        except OSError as e:
+            self.log("ERROR", f"OS error loading configuration: {e}")
             sys.exit(1)
 
     def resolve_platform(

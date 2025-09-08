@@ -395,12 +395,43 @@ def check_npx_available():
         return False
 
 
+def _cleanup_old_usage_caches():
+    """清理过期的使用量缓存文件"""
+    try:
+        cache_dir = DATA_DIR / "cache"
+        if not cache_dir.exists():
+            return
+            
+        today = datetime.now().strftime("%Y%m%d")
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+        
+        # 删除超过2天的缓存文件（保留今天和昨天）
+        for cache_file in cache_dir.glob("cache_usage_daily_*.json"):
+            try:
+                # 从文件名提取日期：cache_usage_daily_20250908.json
+                filename = cache_file.name
+                if filename.startswith("cache_usage_daily_") and filename.endswith(".json"):
+                    date_str = filename[18:26]  # 提取 YYYYMMDD 部分
+                    if date_str not in [today, yesterday]:
+                        cache_file.unlink()
+                        log_message("statusline", f"Cleaned up old usage cache: {filename}")
+            except Exception:
+                # 如果处理单个文件失败，继续处理其他文件
+                continue
+    except Exception:
+        # 清理失败不影响主要功能
+        pass
+
+
 def get_today_usage():
     """获取今日使用量"""
     cache_manager = get_cache_manager()
     today = datetime.now().strftime("%Y%m%d")
     
-    # 尝试从缓存获取数据
+    # 清理过期的缓存文件（保持缓存目录清洁）
+    _cleanup_old_usage_caches()
+    
+    # 尝试从新缓存系统获取今日数据
     cache_entry = cache_manager.get('usage', f'daily_{today}')
     if cache_entry is not None:
         return cache_entry.data
@@ -411,22 +442,29 @@ def get_today_usage():
 
     try:
         # 异步更新缓存 - 不等待结果，直接返回当前缓存或 None
-        # 使用 subprocess.Popen 在后台运行
-        subprocess.Popen(
-            ["python", str(PROJECT_DIR / "update_usage.py"), today],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        # 直接调用库函数而不是启动子进程（更高效、更可靠）
+        from update_usage import update_usage_cache
+        import threading
+        
+        def async_update():
+            try:
+                update_usage_cache(today)
+            except Exception:
+                pass
+        
+        # 在后台线程中执行更新
+        threading.Thread(target=async_update, daemon=True).start()
     except Exception:
         pass
 
-    # 尝试从旧缓存文件获取数据（向后兼容）
+    # 尝试从旧缓存文件获取数据（向后兼容，但必须验证是今天的数据）
     if USAGE_CACHE_FILE.exists():
         try:
             with open(USAGE_CACHE_FILE, "r", encoding="utf-8-sig") as f:
                 cache_data = json.load(f)
                 usage_data = cache_data.get("usage_data")
-                if usage_data:
+                if usage_data and usage_data.get("date") == today:
+                    # 只有当数据确实是今天的时候才使用
                     # 迁移到新缓存系统
                     cache_manager.set('usage', f'daily_{today}', usage_data, 600)
                     return usage_data

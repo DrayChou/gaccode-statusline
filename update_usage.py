@@ -115,14 +115,25 @@ def update_usage_cache(today_date):
                 "date": today_date,
             }
 
-            # 保存到缓存文件
+            # 保存到旧缓存文件（向后兼容）
             cache_data = {"timestamp": datetime.now().isoformat(), "usage_data": usage}
             with open(USAGE_CACHE_FILE, "w", encoding="utf-8-sig") as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            
+            # 同时更新新缓存系统
+            try:
+                sys.path.insert(0, str(PROJECT_DIR))
+                from cache import get_cache_manager
+                cache_manager = get_cache_manager()
+                cache_manager.set('usage', f'daily_{today_date}', usage, 600)
+            except Exception as cache_error:
+                # 新缓存系统失败不影响旧系统
+                with open(log_file, "a", encoding="utf-8-sig") as f:
+                    f.write(f"{datetime.now().isoformat()} - New cache system failed: {cache_error}\n")
 
             # 记录成功
             with open(log_file, "a", encoding="utf-8-sig") as f:
-                f.write(f"{datetime.now().isoformat()} - Cache updated successfully\n")
+                f.write(f"{datetime.now().isoformat()} - Cache updated successfully (both systems)\n")
 
             return True
         else:

@@ -177,14 +177,109 @@ GAC Code需要配置两个Token:
 2. 检查API返回数据格式
 3. 验证正则表达式匹配
 
+## 自动积分重置功能
+
+### 工单历史查询API
+
+**端点**: `GET /api/tickets?page=1&limit=5`
+
+**认证**: `Authorization: Bearer {login_token}`
+
+**查询参数**:
+- `page`: 页码（默认1）
+- `limit`: 每页条数（默认10）
+
+**响应示例**:
+```json
+{
+  "tickets": [
+    {
+      "id": 60313,
+      "categoryId": 3,
+      "title": "请求重置积分",
+      "status": "CLOSED",
+      "createdAt": "2025-09-08T03:09:21.883Z",
+      "category": {
+        "key": "REQUEST_TO_REFILL_CREDIT"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 5,
+    "total": 60,
+    "pages": 3
+  }
+}
+```
+
+### 积分重置API
+
+**端点**: `POST /api/tickets`
+
+**认证**: `Authorization: Bearer {login_token}`
+
+**请求体**:
+```json
+{
+  "categoryId": 3,
+  "title": "请求重置积分", 
+  "description": "",
+  "language": "zh"
+}
+```
+
+**响应示例**:
+```json
+{
+  "message": "工单创建成功",
+  "ticket": {
+    "id": 60313,
+    "status": "CLOSED", 
+    "category": {
+      "key": "REQUEST_TO_REFILL_CREDIT"
+    },
+    "messages": [
+      {
+        "message": "🎉 恭喜！您的积分充值申请已自动批准。您的积分已重置！✅",
+        "isFromSupport": true
+      }
+    ]
+  }
+}
+```
+
+### 自动重置触发条件
+
+系统会在以下情况自动触发积分重置：
+
+1. **余额检查**: 当前积分 ≤ 0
+2. **时间限制**: 今日尚未执行过重置操作
+3. **API可用性**: `login_token` 有效且网络连接正常
+
+### 重置记录追踪
+
+**API查询方式** (推荐):
+- **查询端点**: `GET /api/tickets?page=1&limit=10`
+- **过滤条件**: `categoryId=3` 且 `title="请求重置积分"`
+- **时间判断**: 检查 `createdAt` 是否为今日
+- **重置限制**: 每日最多1次自动重置
+
+**本地缓存方式** (备选):
+- **缓存文件**: `cache/gac-refill-cache.json`
+- **记录格式**: `{"last_refill_date": "2025-09-08", "refill_count": 1}`
+- **缓存TTL**: 24小时（基于日期对比）
+
 ## 技术实现
 
 ### 关键组件
 
 - **平台类**: `platforms/gaccode.py`
-- **API方法**: `fetch_history_data()`
+- **API方法**: `fetch_history_data()`, `make_request()`
 - **检测方法**: `_detect_multiplier_status()` 
 - **显示方法**: `format_balance_display()`
+- **重置方法**: `_should_auto_refill()`, `_perform_refill()`
+- **查询方法**: `_check_today_refill_from_api()`, `_check_today_refill_from_cache()`
 
 ### 缓存策略
 
@@ -192,11 +287,18 @@ GAC Code需要配置两个Token:
 - **余额缓存**: 5分钟TTL
 - **倍率检测**: 每次状态栏刷新时执行
 
+### 频率限制保护
+
+- **GAC API限制**: 所有GAC接口调用间隔最少1分钟
+- **智能检测**: 距离上次请求不足1分钟时自动使用缓存
+- **防封杀机制**: 严格遵守频率限制，避免账号被官方限制
+
 ### 错误处理
 
 - API调用失败时自动回退到时间段判断
 - 正则匹配失败时使用默认值
 - 网络超时保护（5秒超时）
+- 频率限制触发时使用本地缓存备选方案
 
 ## 未来扩展
 
@@ -207,9 +309,12 @@ GAC Code需要配置两个Token:
 - [ ] 倍率变化通知机制
 - [ ] 多时区支持
 - [ ] 倍率统计报告
+- [x] 自动积分重置功能
+- [ ] 重置成功/失败通知机制
 
 ### API增强
 
 - [ ] 支持倍率预测API
 - [ ] 实时倍率变更推送
 - [ ] 倍率历史统计接口
+- [x] 积分重置API集成

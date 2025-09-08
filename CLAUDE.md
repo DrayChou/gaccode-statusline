@@ -28,6 +28,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Users configure EVERYTHING by editing `data/config/config.json`
 - **EXCEPTION**: `bin/launcher.py` may set environment variables internally for Claude Code compatibility
 
+## 🔒 CRITICAL SECURITY RULES: PRIVACY & API PROTECTION
+
+### Privacy Protection Rule
+**MANDATORY**: All code must be safe for public release with zero privacy leaks.
+
+#### Privacy Requirements:
+- ❌ **NO hardcoded credentials** - No real API keys, tokens, emails in any code/docs
+- ❌ **NO sensitive data examples** - Use placeholder formats only (`sk-ant-xxx...`, `eyJhbG...`)
+- ✅ **Complete data masking** - All logs must automatically filter sensitive information
+- ✅ **Gitignore protection** - All config files, caches, logs excluded from version control
+- ✅ **Documentation safety** - Only show sanitized examples with masked data
+
+#### Implementation Requirements:
+```python
+# ❌ NEVER do this
+api_key = "sk-ant-real-key-here"  # PRIVACY VIOLATION
+
+# ✅ Always do this
+api_key = config.get("api_key")   # Read from user config
+log_message("API key", f"sk-ant-***{api_key[-4:]}")  # Auto-masked logging
+```
+
+### API Rate Limiting Rule  
+**MANDATORY**: All external API calls must respect provider limits to prevent account suspension.
+
+#### Rate Limiting Requirements:
+- ⚠️ **GAC Code APIs**: Minimum 60 seconds between calls (prevent account ban)
+- ⚠️ **Other APIs**: Follow documented rate limits or use conservative defaults
+- ✅ **Intelligent fallback** - Use cached data when rate limited
+- ✅ **User transparency** - Rate limiting should be invisible to users
+
+#### Implementation Pattern:
+```python
+def api_call(self):
+    # Check rate limit
+    if (time.time() - self._last_request) < self._min_interval:
+        return self._use_cached_data()  # Fallback to cache
+    
+    # Safe to make API call
+    return self._make_api_request()
+```
+
+#### Critical Platform Limits:
+- **GAC Code**: 60+ seconds interval (risk: account ban)
+- **OpenAI**: 60 requests/minute (risk: temporary throttling)
+- **Anthropic**: Follow tier limits (risk: rate limit errors)
+
 ## Project Overview
 
 GAC Code Multi-Platform Status Line - A comprehensive Claude Code statusline plugin that supports multiple AI API platforms (GAC Code, Kimi, DeepSeek, SiliconFlow, Local Proxy) with real-time balance display, session mapping, and intelligent platform detection.
@@ -408,3 +455,48 @@ The statusline integrates via Claude Code's status line configuration:
 - **requests**: Python HTTP library for API calls
 - **pathlib**: Modern path handling
 - **json**: Configuration and data serialization
+
+## Critical Reminders
+
+### 🔒 Security & Privacy
+**NEVER**:
+- Include real API keys, tokens, emails in code or documentation
+- Use hardcoded credentials in examples - always use placeholders
+- Commit sensitive configuration files or cache data
+- Skip data masking in logs or debug output
+- Make frequent API calls without rate limiting
+
+**ALWAYS**:
+- Use placeholder formats in documentation (`sk-ant-xxx...`, `eyJhbG...`)
+- Implement automatic sensitive data filtering in logs
+- Respect API rate limits (GAC: 60+ second intervals)
+- Use cached data when rate limited
+- Audit code for privacy leaks before release
+
+### 🚨 API Protection
+**GAC Code Specific**:
+- **CRITICAL**: 60 second minimum between API calls (risk: account ban)
+- Use intelligent fallback to cached data when rate limited
+- Monitor and log API call frequencies for debugging
+- Never bypass rate limiting for "urgent" features
+
+**Other Platforms**:
+- Follow documented rate limits for each provider
+- Implement conservative defaults when limits unknown
+- Use exponential backoff for retry logic
+- Cache API responses appropriately (balance TTL vs freshness)
+
+### 🛠️ Development Guidelines  
+**NEVER**:
+- Use `--no-verify` to bypass commit hooks
+- Disable tests instead of fixing them
+- Commit code that doesn't compile
+- Make assumptions - verify with existing code
+- Create files unless absolutely necessary
+
+**ALWAYS**:
+- Commit working code incrementally
+- Learn from existing implementations before coding
+- Stop after 3 failed attempts and reassess approach
+- Use unified caching and logging systems
+- Follow existing code patterns and conventions

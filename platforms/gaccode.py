@@ -11,6 +11,7 @@ import re
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 # Import unified cache manager
@@ -33,6 +34,11 @@ class GACCodePlatform(BasePlatform):
         self._history_cache_file = cache_dir / "gac-history-cache.json"
         self._balance_cache_file = cache_dir / "balance-cache-gaccode.json"
         self._subscription_cache_file = cache_dir / "subscription-cache-gaccode.json"
+        self._refill_cache_file = cache_dir / "gac-refill-cache.json"
+        
+        # GAC API 专用频率限制配置 - 防止被封杀  
+        self._min_request_interval = 60.0  # GAC API 要求最少1分钟间隔
+        
         self._ensure_cache_directories()
 
     @property
@@ -152,6 +158,9 @@ class GACCodePlatform(BasePlatform):
             # 缓存无效或不存在，调用API
             api_data = self.make_request("/credits/balance")
             if api_data:
+                # 检查是否需要自动重置积分
+                self._check_and_auto_refill(api_data)
+                
                 # 保存到缓存（5分钟TTL）
                 self._save_cache_data(self._balance_cache_file, api_data, 300)
                 return api_data
@@ -568,3 +577,275 @@ class GACCodePlatform(BasePlatform):
         # 高倍率时段: 9:00-12:00, 14:00-18:00
         hour = now.hour
         return (9 <= hour < 12) or (14 <= hour < 18)
+
+    def make_request(self, endpoint: str, method: str = "GET", data: Dict[str, Any] = None, timeout: int = 5) -> Optional[Dict[str, Any]]:
+        """Make API request with support for GET and POST methods"""
+        from data.logger import log_message
+
+        # Check if session is still available
+        if self._session_closed or not self._session:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR", 
+                "Cannot make request: session is closed"
+            )
+            return None
+        
+        url = f"{self.api_base}{endpoint}"
+        headers = self.get_headers()
+        
+        log_message(
+            f"{self.name}-platform",
+            "DEBUG",
+            f"Starting {method} API request with retry mechanism",
+            {
+                "platform": self.name,
+                "endpoint": endpoint,
+                "method": method,
+                "full_url": url,
+                "timeout": timeout,
+                "max_retries": self._max_retries,
+            },
+        )
+        
+        last_exception = None
+        
+        for attempt in range(self._max_retries + 1):
+            try:
+                # Apply rate limiting
+                self._rate_limit()
+                
+                log_message(
+                    f"{self.name}-platform",
+                    "DEBUG",
+                    f"API request attempt {attempt + 1}/{self._max_retries + 1}",
+                    {
+                        "platform": self.name,
+                        "url": url,
+                        "method": method,
+                        "timeout": timeout,
+                    },
+                )
+
+                # Make HTTP request based on method
+                if method.upper() == "POST":
+                    response = self._session.post(
+                        url, 
+                        headers=headers, 
+                        json=data,
+                        timeout=timeout,
+                        verify=True,
+                        allow_redirects=False
+                    )
+                else:
+                    response = self._session.get(
+                        url, 
+                        headers=headers, 
+                        timeout=timeout,
+                        verify=True,
+                        allow_redirects=False
+                    )
+
+                log_message(
+                    f"{self.name}-platform",
+                    "DEBUG",
+                    "API response received",
+                    {
+                        "platform": self.name,
+                        "endpoint": endpoint,
+                        "method": method,
+                        "status_code": response.status_code,
+                        "attempt": attempt + 1,
+                    },
+                )
+
+                response.raise_for_status()
+
+                # Success - parse JSON and return
+                try:
+                    json_data = response.json()
+                    log_message(
+                        f"{self.name}-platform",
+                        "INFO",
+                        f"{method} API request successful",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "method": method,
+                            "response_type": type(json_data).__name__,
+                            "attempt": attempt + 1,
+                        },
+                    )
+                    return json_data
+                except json.JSONDecodeError as json_error:
+                    log_message(
+                        f"{self.name}-platform",
+                        "ERROR",
+                        "API JSON parsing failed",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "method": method,
+                            "status_code": response.status_code,
+                            "response_text": response.text[:200],
+                            "json_error": str(json_error),
+                        },
+                    )
+                    return None
+
+            except Exception as e:
+                last_exception = e
+                
+                # Check if we should retry
+                if not self._should_retry(e, attempt):
+                    break
+                
+                # Calculate delay before retry
+                if attempt < self._max_retries:
+                    delay = self._calculate_retry_delay(attempt)
+                    log_message(
+                        f"{self.name}-platform",
+                        "WARNING",
+                        f"Request failed, retrying in {delay:.1f}s",
+                        {
+                            "platform": self.name,
+                            "endpoint": endpoint,
+                            "method": method,
+                            "attempt": attempt + 1,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "retry_delay": delay,
+                        },
+                    )
+                    time.sleep(delay)
+                else:
+                    break
+        
+        # All retries exhausted - log final error
+        if last_exception:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR",
+                f"{method} API request failed after {self._max_retries + 1} attempts",
+                {
+                    "platform": self.name,
+                    "endpoint": endpoint,
+                    "method": method,
+                    "final_error": str(last_exception),
+                    "error_type": type(last_exception).__name__,
+                },
+            )
+        
+        return None
+
+    def _check_and_auto_refill(self, balance_data: Dict[str, Any]) -> None:
+        """检查余额并在需要时自动重置积分"""
+        try:
+            balance = balance_data.get("balance", 0)
+            if balance <= 0 and self._should_auto_refill():
+                self._perform_refill()
+        except Exception:
+            pass  # 自动重置失败不影响主流程
+
+    def _should_auto_refill(self) -> bool:
+        """判断是否应该进行自动重置（优先检查API，备选本地缓存）"""
+        # 优先使用API检查今日是否已有重置记录
+        if not self._check_today_refill_from_api():
+            return True  # API检查显示今日没有重置记录，允许重置
+        
+        # API显示已有重置记录，禁止重复重置
+        return False
+
+    def _check_today_refill_from_api(self) -> bool:
+        """通过API检查今日是否已有重置记录（遵守频率限制）"""
+        try:
+            # 检查上次API调用时间，防止过于频繁的请求
+            current_time = time.time()
+            if (current_time - self._last_request_time) < 60.0:  # 1分钟限制
+                # 距离上次请求不足1分钟，使用缓存检查
+                return self._check_today_refill_from_cache()
+            
+            # 调用工单历史API，获取最近的记录
+            tickets_data = self.make_request("/tickets?page=1&limit=10")
+            if not tickets_data or "tickets" not in tickets_data:
+                return False  # API失败，默认为没有记录
+            
+            today = datetime.now().date()
+            
+            # 检查每个工单是否为今日的积分重置请求
+            for ticket in tickets_data["tickets"]:
+                if (ticket.get("categoryId") == 3 and 
+                    ticket.get("title") == "请求重置积分"):
+                    
+                    # 解析创建时间
+                    created_at_str = ticket.get("createdAt")
+                    if created_at_str:
+                        try:
+                            created_at = datetime.fromisoformat(
+                                created_at_str.replace("Z", "+00:00")
+                            )
+                            # 转换为北京时间进行比较
+                            beijing_time = created_at.astimezone(timezone(timedelta(hours=8)))
+                            ticket_date = beijing_time.date()
+                            
+                            if ticket_date == today:
+                                return True  # 找到今日的重置记录
+                        except Exception:
+                            continue  # 时间解析失败，跳过该记录
+            
+            return False  # 没有找到今日的重置记录
+            
+        except Exception:
+            # API调用失败或频率限制，回退到本地缓存检查
+            return self._check_today_refill_from_cache()
+    
+    def _check_today_refill_from_cache(self) -> bool:
+        """从本地缓存检查今日是否已重置（备选方案）"""
+        today = datetime.now().date().isoformat()
+        
+        if self._refill_cache_file.exists():
+            try:
+                with open(self._refill_cache_file, "r", encoding="utf-8-sig") as f:
+                    refill_data = json.load(f)
+                last_refill_date = refill_data.get("last_refill_date")
+                return last_refill_date == today  # 返回是否为今日
+            except Exception:
+                return False  # 缓存读取失败，默认为没有记录
+        
+        return False  # 无缓存记录
+
+    def _perform_refill(self) -> bool:
+        """执行积分重置操作"""
+        try:
+            # 调用积分重置API
+            refill_data = {
+                "categoryId": 3,
+                "title": "请求重置积分",
+                "description": "",
+                "language": "zh"
+            }
+            
+            response = self.make_request("/tickets", method="POST", data=refill_data)
+            if response and response.get("message") == "工单创建成功":
+                # 更新本地缓存记录（备用）
+                self._update_refill_cache()
+                return True
+            
+            return False
+        except Exception:
+            return False
+
+    def _update_refill_cache(self) -> None:
+        """更新重置记录缓存"""
+        try:
+            today = datetime.now().date().isoformat()
+            refill_record = {
+                "last_refill_date": today,
+                "refill_count": 1,
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            with open(self._refill_cache_file, "w", encoding="utf-8") as f:
+                json.dump(refill_record, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass  # 缓存更新失败不影响重置操作

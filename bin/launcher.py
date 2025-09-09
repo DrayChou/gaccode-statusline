@@ -418,8 +418,10 @@ class ClaudeLauncher:
         if platform_config.get("api_key"):
             os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
         elif platform_config.get("auth_token"):
-            os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]  # Claude Code统一使用API_KEY
-        # 注意：login_token是GAC Code独有的用来查询余额的token，不用于Claude Code认证
+            # os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]  
+            os.environ["ANTHROPIC_AUTH_TOKEN"] = platform_config["auth_token"]
+            # Claude Code 统一使用 API_KEY
+        # 注意：login_token 是 GAC Code 独有的用来查询余额的 token，不用于 Claude Code 认证
             
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
         os.environ["ANTHROPIC_MODEL"] = platform_config["model"]

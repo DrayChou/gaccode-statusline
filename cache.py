@@ -154,13 +154,21 @@ class CacheManager:
     
     def set(self, namespace: str, key: str, data: Any, ttl_seconds: Optional[int] = None, params: Optional[Dict[str, Any]] = None) -> bool:
         """设置缓存条目"""
+        import random
         cache_key = self._generate_cache_key(namespace, key, params)
         
-        # 确定TTL
+        # 确定TTL，添加随机抖动防止缓存雪崩
         if ttl_seconds is None:
-            ttl_seconds = self.cache_strategies.get(namespace, 300)  # 默认5分钟
+            base_ttl = self.cache_strategies.get(namespace, 300)  # 默认5分钟
+        else:
+            base_ttl = ttl_seconds
         
-        entry = CacheEntry(data=data, cached_at=datetime.now(), ttl_seconds=ttl_seconds)
+        # 添加±10%的随机抖动
+        jitter_range = int(base_ttl * 0.1)
+        jitter = random.randint(-jitter_range, jitter_range)
+        final_ttl = max(60, base_ttl + jitter)  # 最小1分钟TTL
+        
+        entry = CacheEntry(data=data, cached_at=datetime.now(), ttl_seconds=final_ttl)
         
         with self._cache_lock_context():
             # 保存到内存缓存

@@ -18,7 +18,7 @@ try:
     # Try absolute import first
     from config import get_config_manager
     from data.logger import log_message, log_platform_detection, log_error
-    from data.session_manager import SessionManager, detect_platform_from_session_id
+    from data.session_mapping_v2 import get_session_platform, detect_platform_from_session_id
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,7 +26,7 @@ except ImportError:
 
     sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
     from logger import log_message, log_platform_detection, log_error
-    from session_manager import SessionManager, detect_platform_from_session_id
+    from session_mapping_v2 import get_session_platform, detect_platform_from_session_id
 
 
 class PlatformManager:
@@ -57,54 +57,36 @@ class PlatformManager:
 
         # 优先级0 - Session Mapping查询（处理标准UUID）
         if session_id:
-            # 先查询session-mappings.json文件
+            # 先查询session映射系统（优先使用V2目录式存储）
             try:
-                from pathlib import Path
-                import json
-
-                script_dir = Path(__file__).parent
-                mapping_file = (
-                    script_dir.parent / "data" / "cache" / "session-mappings.json"
-                )
-
-                if mapping_file.exists():
-                    try:
-                        with open(mapping_file, "r", encoding="utf-8-sig") as f:
-                            mappings = json.load(f)
-
-                        if session_id in mappings:
-                            mapping_info = mappings[session_id]
-                            detected_platform_name = mapping_info.get("platform")
-
-                            if detected_platform_name:
-                                log_message(
-                                    "platform-manager",
-                                    "INFO",
-                                    f"Platform detected from session mapping: {detected_platform_name}",
-                                    {
-                                        "session_id": session_id,
-                                        "detected_platform": detected_platform_name,
-                                        "mapping_type": "session_mappings",
-                                    },
-                                )
-
-                                # 获取平台配置并创建实例
-                                platform_instance = self._create_platform_instance(
-                                    detected_platform_name, token, config, session_id
-                                )
-                                if platform_instance:
-                                    return platform_instance
-                    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-                        log_message(
-                            "platform-manager",
-                            "WARNING",
-                            f"Failed to parse session mappings: {e}",
-                        )
+                from data.session_mapping_v2 import get_session_platform
+                
+                detected_platform_name = get_session_platform(session_id)
+                
+                if detected_platform_name:
+                    log_message(
+                        "platform-manager",
+                        "INFO",
+                        f"Platform detected from session mapping V2: {detected_platform_name}",
+                        {
+                            "session_id": session_id[:8] + "...",
+                            "detected_platform": detected_platform_name,
+                            "mapping_type": "session_mappings_v2",
+                        },
+                    )
+                    
+                    # 获取平台配置并创建实例
+                    platform_instance = self._create_platform_instance(
+                        detected_platform_name, token, config, session_id
+                    )
+                    if platform_instance:
+                        return platform_instance
+                        
             except Exception as e:
                 log_message(
                     "platform-manager",
                     "DEBUG",
-                    f"Session mapping lookup failed: {e}",
+                    f"Session mapping V2 lookup failed: {e}",
                 )
 
         # 优先级1 - Session ID前缀检测（最快，O(1)复杂度）

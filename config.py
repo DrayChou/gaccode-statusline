@@ -354,7 +354,7 @@ class ConfigManager:
                 # 优先级2: UUID 前缀检测
                 try:
                     sys.path.insert(0, str(self.project_dir / "data"))
-                    from session_manager import detect_platform_from_session_id
+                    from session_mapping_v2 import detect_platform_from_session_id
                     prefix_platform = detect_platform_from_session_id(session_id)
                     if prefix_platform:
                         return prefix_platform

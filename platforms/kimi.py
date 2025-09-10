@@ -52,6 +52,7 @@ class KimiPlatform(BasePlatform):
     def fetch_balance_data(self) -> Optional[Dict[str, Any]]:
         """Fetch balance data from Kimi API"""
         from data.logger import log_message
+        import time
 
         log_message(
             "kimi-platform",
@@ -59,17 +60,57 @@ class KimiPlatform(BasePlatform):
             "Starting Kimi balance fetch",
             {
                 "endpoint": "/users/me/balance",
+                "api_base": self.api_base,
                 "token_length": len(self.token) if self.token else 0,
                 "token_prefix": (
                     self.token[:10] + "..."
                     if self.token and len(self.token) > 10
                     else self.token
                 ),
+                "rate_limit_interval": getattr(self, '_min_request_interval', 'not_set'),
+                "last_request_time": getattr(self, '_last_request_time', 'not_set'),
+                "current_time": time.time(),
             },
         )
 
+        # Check rate limiting status
+        if hasattr(self, '_last_request_time') and self._last_request_time > 0:
+            elapsed = time.time() - self._last_request_time
+            log_message(
+                "kimi-platform",
+                "DEBUG",
+                "Rate limiting check",
+                {
+                    "elapsed_seconds": elapsed,
+                    "min_interval": getattr(self, '_min_request_interval', 'not_set'),
+                    "can_make_request": elapsed >= getattr(self, '_min_request_interval', 60),
+                },
+            )
+
         try:
+            log_message(
+                "kimi-platform",
+                "DEBUG",
+                "About to call make_request",
+                {
+                    "endpoint": "/users/me/balance",
+                    "full_url": f"{self.api_base}/users/me/balance",
+                },
+            )
+
             result = self.make_request("/users/me/balance")
+
+            log_message(
+                "kimi-platform",
+                "DEBUG",
+                "make_request completed",
+                {
+                    "endpoint": "/users/me/balance",
+                    "result_type": type(result).__name__,
+                    "result_is_none": result is None,
+                    "result_length": len(str(result)) if result else 0,
+                },
+            )
 
             if result is None:
                 log_message(
@@ -79,6 +120,8 @@ class KimiPlatform(BasePlatform):
                     {
                         "endpoint": "/users/me/balance",
                         "possible_cause": "API request failed or returned empty data",
+                        "session_closed": getattr(self, '_session_closed', 'unknown'),
+                        "session_exists": hasattr(self, '_session') and self._session is not None,
                     },
                 )
                 return None
@@ -98,6 +141,7 @@ class KimiPlatform(BasePlatform):
                     "response_status": (
                         result.get("status") if isinstance(result, dict) else None
                     ),
+                    "timestamp": time.time(),
                 },
             )
 
@@ -112,6 +156,8 @@ class KimiPlatform(BasePlatform):
                     "endpoint": "/users/me/balance",
                     "error_type": type(e).__name__,
                     "error_message": str(e),
+                    "full_traceback": str(e),
+                    "timestamp": time.time(),
                 },
             )
             return None
@@ -124,6 +170,16 @@ class KimiPlatform(BasePlatform):
     def format_balance_display(self, balance_data: Dict[str, Any]) -> str:
         """Format Kimi balance for display"""
         from data.logger import log_message
+
+        # 处理空数据情况
+        if balance_data is None:
+            log_message(
+                "kimi-platform",
+                "INFO",
+                "No balance data available for display",
+                {"display": "nodata"}
+            )
+            return "KIMI.B:\033[90mNoData\033[0m"
 
         log_message(
             "kimi-platform",

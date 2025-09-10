@@ -197,14 +197,56 @@ def get_session_info():
 
 
 def cache_session_info(session_data):
-    """缓存session信息到本地文件（带文件锁定）"""
+    """缓存session信息到本地文件（双层存储架构）"""
     try:
-        # 使用安全的文件写入（带锁定）
-        success = safe_json_write(SESSION_INFO_FILE, session_data)
-        if success:
-            log_message("statusline", "DEBUG", "Session info cached successfully")
+        session_id = session_data.get("session_id")
+        
+        # 1. 更新"当前活跃session"标识文件（保持向后兼容）
+        success_current = safe_json_write(SESSION_INFO_FILE, session_data)
+        if success_current:
+            log_message("statusline", "DEBUG", "Current session info cached successfully")
         else:
-            log_message("statusline", "WARNING", "Failed to cache session info")
+            log_message("statusline", "WARNING", "Failed to cache current session info")
+        
+        # 2. 更新sessions目录中的详细信息（多实例支持）
+        if session_id:
+            try:
+                from data.session_mapping_v2 import update_session_info, get_session_platform, detect_platform_from_session_id
+                
+                # 尝试获取已知平台或检测平台
+                platform = get_session_platform(session_id)
+                if not platform:
+                    platform = detect_platform_from_session_id(session_id)
+                if not platform:
+                    platform = "gaccode"  # 默认平台
+                
+                # 更新详细session信息
+                success_detailed = update_session_info(session_id, session_data, platform)
+                if success_detailed:
+                    log_message(
+                        "statusline", 
+                        "DEBUG", 
+                        f"Detailed session info updated for {platform}",
+                        {"session_id": session_id[:8] + "...", "platform": platform}
+                    )
+                else:
+                    log_message(
+                        "statusline", 
+                        "WARNING", 
+                        f"Failed to update detailed session info",
+                        {"session_id": session_id[:8] + "..."}
+                    )
+                    
+            except Exception as e:
+                log_message(
+                    "statusline", 
+                    "ERROR", 
+                    f"Failed to update detailed session info: {e}",
+                    {"session_id": session_id[:8] + "..." if session_id else "unknown"}
+                )
+        else:
+            log_message("statusline", "WARNING", "No session_id found in session data")
+            
     except Exception as e:
         # 缓存失败不影响主要功能，记录日志但不抛出异常
         log_message("statusline", "ERROR", f"Session cache error: {e}")
@@ -570,19 +612,42 @@ def load_platform_config():
 
 def load_platform_cache(platform_name):
     """加载特定平台的缓存数据"""
+    from datetime import datetime, timedelta
     cache_manager = get_cache_manager()
     result = {"balance": None, "subscriptions": None}
     
-    # 获取余额缓存（TTL: 5分钟）
+    # 获取余额缓存（TTL: 5分钟，最大有效期: 24小时）
     balance_entry = cache_manager.get('balance', f'{platform_name}_balance')
     if balance_entry:
-        result["balance"] = balance_entry.data
-        log_message(
-            "statusline",
-            "DEBUG", 
-            f"Using {platform_name} balance cache",
-            {"remaining_seconds": balance_entry.remaining_seconds}
-        )
+        # 使用缓存条目的内置年龄检查，避免重复计算
+        cache_age_hours = balance_entry.age_seconds / 3600
+        max_cache_age_hours = 24  # 最大缓存24小时
+        
+        if cache_age_hours <= max_cache_age_hours:
+            result["balance"] = balance_entry.data
+            log_message(
+                "statusline",
+                "DEBUG", 
+                f"Using {platform_name} balance cache",
+                {
+                    "remaining_seconds": balance_entry.remaining_seconds,
+                    "cache_age_hours": round(cache_age_hours, 2),
+                    "max_age_hours": max_cache_age_hours
+                }
+            )
+        else:
+            log_message(
+                "statusline",
+                "WARNING", 
+                f"{platform_name} balance cache expired (too old)",
+                {
+                    "cache_age_hours": round(cache_age_hours, 2),
+                    "max_age_hours": max_cache_age_hours,
+                    "action": "cache_invalidated"
+                }
+            )
+            # 删除过期缓存
+            cache_manager.delete('balance', f'{platform_name}_balance')
     
     # 获取订阅缓存（TTL: 1小时）
     subscription_entry = cache_manager.get('subscription', f'{platform_name}_subscription')
@@ -595,34 +660,7 @@ def load_platform_cache(platform_name):
             {"remaining_seconds": subscription_entry.remaining_seconds}
         )
     
-    # 向后兼容：尝试从旧缓存文件迁移数据
-    _migrate_legacy_platform_cache(platform_name, result)
     return result
-
-
-def _migrate_legacy_platform_cache(platform_name, result):
-    """迁移旧平台缓存数据到统一缓存系统"""
-    platform_cache_file = DATA_DIR / "cache" / f"balance-cache-{platform_name}.json"
-    if platform_cache_file.exists():
-        try:
-            cache = safe_json_read(platform_cache_file, {})
-            cache_manager = get_cache_manager()
-            
-            # 迁移余额数据
-            if cache.get("balance_data") and not result["balance"]:
-                cache_manager.set('balance', f'{platform_name}_balance', cache["balance_data"], 300)
-                result["balance"] = cache["balance_data"]
-            
-            # 迁移订阅数据
-            if cache.get("subscription_data") and not result["subscriptions"]:
-                cache_manager.set('subscription', f'{platform_name}_subscription', cache["subscription_data"], 3600)
-                result["subscriptions"] = cache["subscription_data"]
-        except Exception as e:
-            log_message(
-                "statusline",
-                "WARNING", 
-                f"Failed to migrate {platform_name} legacy cache: {e}",
-                )
 
 
 def save_platform_cache(platform_name, balance_data=None, subscription_data=None):
@@ -904,11 +942,25 @@ def fetch_platform_balance_data(platform, config):
     cached = load_platform_cache(platform.name)
     balance_data = cached["balance"]
     
+    log_message(
+        "statusline",
+        "DEBUG",
+        f"Cache check for {platform.name}",
+        {
+            "platform": platform.name,
+            "cache_hit": balance_data is not None,
+            "cache_data_preview": (
+                str(balance_data)[:100] + "..." if balance_data else None
+            ),
+        },
+    )
+    
     if balance_data is None:
         log_message(
             "statusline",
             "DEBUG",
             f"Cache miss, fetching balance from {platform.name} API",
+            {"platform": platform.name, "reason": "no_cached_data"},
         )
         try:
             balance_data = platform.fetch_balance_data()
@@ -1069,7 +1121,7 @@ def detect_statusline_mode(config, session_info):
                         return ("multi_platform", detected_platform, 1.0)
             
             # 检查UUID前缀
-            from data.session_manager import detect_platform_from_session_id
+            from data.session_mapping_v2 import detect_platform_from_session_id
             prefix_platform = detect_platform_from_session_id(session_id)
             if prefix_platform:
                 log_message(

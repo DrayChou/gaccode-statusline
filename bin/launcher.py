@@ -577,41 +577,34 @@ class ClaudeLauncher:
     def _create_dual_session_mapping(
         self, prefixed_uuid: str, standard_uuid: str, platform: str
     ):
-        """创建双向UUID映射以解决statusline平台检测问题"""
+        """创建双向UUID映射（优先使用V2目录式存储）"""
         try:
-            # 确定映射文件路径
-            mapping_file = (
-                self.script_dir.parent / "data" / "cache" / "session-mappings.json"
-            )
-
-            # 读取现有映射
-            existing_mappings = safe_json_read(mapping_file, {})
-
-            # 创建双向映射条目
-            session_info = {
-                "platform": platform,
+            # 使用SessionMappingV2系统
+            from data.session_mapping_v2 import set_session_platform
+            
+            metadata = {
+                "prefixed_uuid": prefixed_uuid,
+                "standard_uuid": standard_uuid,
                 "created": datetime.now().isoformat(),
-                "prefixed_uuid": prefixed_uuid,  # 存储原始带前缀UUID
-                "standard_uuid": standard_uuid,  # 存储标准UUID
+                "launcher_version": "v2"
             }
-
-            # 同时存储两种UUID格式的映射
-            existing_mappings[prefixed_uuid] = session_info.copy()
-            existing_mappings[standard_uuid] = session_info.copy()
-
-            # 保存映射
-            if safe_json_write(mapping_file, existing_mappings):
+            
+            # 创建双向映射
+            success1 = set_session_platform(prefixed_uuid, platform, metadata)
+            success2 = set_session_platform(standard_uuid, platform, metadata)
+            
+            if success1 and success2:
                 self.log(
-                    "DEBUG",
-                    f"Created dual UUID mapping: {prefixed_uuid} <-> {standard_uuid} -> {platform}",
+                    f"Session mapping V2 created: {prefixed_uuid[:8]}... & {standard_uuid[:8]}... -> {platform}"
                 )
+                return True
             else:
-                self.log(
-                    "WARNING", f"Failed to create session mapping for {prefixed_uuid}"
-                )
+                self.log("ERROR", f"SessionMapping V2 failed to create mappings")
+                return False
 
         except Exception as e:
             self.log("ERROR", f"Failed to create dual session mapping: {e}")
+            return False
 
     def launch_claude(
         self, session_id: str, continue_session: bool, remaining_args: List[str]

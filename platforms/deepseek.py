@@ -135,6 +135,16 @@ class DeepSeekPlatform(BasePlatform):
 
     def format_balance_display(self, balance_data: Dict[str, Any]) -> str:
         """Format DeepSeek balance for display"""
+        # 处理空数据情况
+        if balance_data is None:
+            log_message(
+                "deepseek-platform",
+                "INFO",
+                "No balance data available for display",
+                {"display": "nodata"}
+            )
+            return "DeepSeek.B:\033[90mNoData\033[0m"
+
         log_message(
             "deepseek-platform",
             "DEBUG",

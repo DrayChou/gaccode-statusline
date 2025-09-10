@@ -32,7 +32,7 @@ class BasePlatform(ABC):
         
         # Rate limiting and retry configuration
         self._last_request_time = 0
-        self._min_request_interval = config.get('rate_limit_interval', 1.0)  # seconds
+        self._min_request_interval = config.get('rate_limit_interval', 60.0)  # seconds - default 1 minute
         self._max_retries = config.get('max_retries', 3)
         self._retry_delay = config.get('retry_delay', 2.0)  # seconds
         self._backoff_multiplier = config.get('backoff_multiplier', 2.0)
@@ -137,8 +137,9 @@ class BasePlatform(ABC):
         return self._retry_delay * (self._backoff_multiplier ** attempt)
 
     def make_request(self, endpoint: str, timeout: int = 5) -> Optional[Dict[str, Any]]:
-        """Make API request with retry mechanism and rate limiting"""
+        """Make API request with cross-process locking and rate limiting"""
         from data.logger import log_message
+        from data.api_lock import api_request_lock
 
         # Check if session is still available
         if self._session_closed or not self._session:
@@ -152,136 +153,152 @@ class BasePlatform(ABC):
         url = f"{self.api_base}{endpoint}"
         headers = self.get_headers()
         
-        log_message(
-            f"{self.name}-platform",
-            "DEBUG",
-            "Starting API request with retry mechanism",
-            {
-                "platform": self.name,
-                "endpoint": endpoint,
-                "full_url": url,
-                "timeout": timeout,
-                "max_retries": self._max_retries,
-            },
-        )
-        
-        last_exception = None
-        
-        for attempt in range(self._max_retries + 1):
-            try:
-                # Apply rate limiting
-                self._rate_limit()
-                
+        # Use cross-process API locking
+        with api_request_lock(self.name, endpoint, self._min_request_interval) as can_proceed:
+            if not can_proceed:
                 log_message(
                     f"{self.name}-platform",
-                    "DEBUG",
-                    f"API request attempt {attempt + 1}/{self._max_retries + 1}",
-                    {
-                        "platform": self.name,
-                        "url": url,
-                        "headers_keys": list(headers.keys()),
-                        "timeout": timeout,
-                    },
-                )
-
-                # 安全的HTTP请求
-                response = self._session.get(
-                    url, 
-                    headers=headers, 
-                    timeout=timeout,
-                    verify=True,  # 强制SSL验证
-                    allow_redirects=False  # 禁止自动重定向防止攻击
-                )
-
-                log_message(
-                    f"{self.name}-platform",
-                    "DEBUG",
-                    "API response received",
+                    "INFO",
+                    "API request blocked by cross-process rate limiting",
                     {
                         "platform": self.name,
                         "endpoint": endpoint,
-                        "status_code": response.status_code,
-                        "attempt": attempt + 1,
-                    },
+                        "min_interval": self._min_request_interval,
+                        "action": "using_cache_fallback"
+                    }
                 )
-
-                response.raise_for_status()
-
-                # Success - parse JSON and return
+                return None  # 返回None，上层逻辑会使用缓存
+        
+            log_message(
+                f"{self.name}-platform",
+                "DEBUG",
+                "Starting API request with retry mechanism",
+                {
+                    "platform": self.name,
+                    "endpoint": endpoint,
+                    "full_url": url,
+                    "timeout": timeout,
+                    "max_retries": self._max_retries,
+                },
+            )
+        
+            last_exception = None
+            
+            for attempt in range(self._max_retries + 1):
                 try:
-                    json_data = response.json()
+                    # Apply rate limiting
+                    self._rate_limit()
+                    
                     log_message(
                         f"{self.name}-platform",
-                        "INFO",
-                        "API request successful",
+                        "DEBUG",
+                        f"API request attempt {attempt + 1}/{self._max_retries + 1}",
                         {
                             "platform": self.name,
-                            "endpoint": endpoint,
-                            "response_type": type(json_data).__name__,
-                            "attempt": attempt + 1,
-                            "response_keys": (
-                                list(json_data.keys())
-                                if isinstance(json_data, dict)
-                                else "not_dict"
-                            ),
+                            "url": url,
+                            "headers_keys": list(headers.keys()),
+                            "timeout": timeout,
                         },
                     )
-                    return json_data
-                except json.JSONDecodeError as json_error:
+
+                    # 安全的HTTP请求
+                    response = self._session.get(
+                        url, 
+                        headers=headers, 
+                        timeout=timeout,
+                        verify=True,  # 强制SSL验证
+                        allow_redirects=False  # 禁止自动重定向防止攻击
+                    )
+
                     log_message(
                         f"{self.name}-platform",
-                        "ERROR",
-                        "API JSON parsing failed",
+                        "DEBUG",
+                        "API response received",
                         {
                             "platform": self.name,
                             "endpoint": endpoint,
                             "status_code": response.status_code,
-                            "response_text": response.text[:200],
-                            "json_error": str(json_error),
-                        },
-                    )
-                    return None
-
-            except Exception as e:
-                last_exception = e
-                
-                # Check if we should retry
-                if not self._should_retry(e, attempt):
-                    break
-                
-                # Calculate delay before retry
-                if attempt < self._max_retries:
-                    delay = self._calculate_retry_delay(attempt)
-                    log_message(
-                        f"{self.name}-platform",
-                        "WARNING",
-                        f"Request failed, retrying in {delay:.1f}s",
-                        {
-                            "platform": self.name,
-                            "endpoint": endpoint,
                             "attempt": attempt + 1,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "retry_delay": delay,
                         },
                     )
-                    time.sleep(delay)
-                else:
-                    break
-        
-        # All retries exhausted - log final error
-        if last_exception:
-            log_message(
-                f"{self.name}-platform",
-                "ERROR",
-                f"API request failed after {self._max_retries + 1} attempts",
-                {
-                    "platform": self.name,
-                    "endpoint": endpoint,
-                    "final_error": str(last_exception),
-                    "error_type": type(last_exception).__name__,
-                },
-            )
-        
-        return None
+
+                    response.raise_for_status()
+
+                    # Success - parse JSON and return
+                    try:
+                        json_data = response.json()
+                        log_message(
+                            f"{self.name}-platform",
+                            "INFO",
+                            "API request successful",
+                            {
+                                "platform": self.name,
+                                "endpoint": endpoint,
+                                "response_type": type(json_data).__name__,
+                                "attempt": attempt + 1,
+                                "response_keys": (
+                                    list(json_data.keys())
+                                    if isinstance(json_data, dict)
+                                    else "not_dict"
+                                ),
+                            },
+                        )
+                        return json_data
+                    except json.JSONDecodeError as json_error:
+                        log_message(
+                            f"{self.name}-platform",
+                            "ERROR",
+                            "API JSON parsing failed",
+                            {
+                                "platform": self.name,
+                                "endpoint": endpoint,
+                                "status_code": response.status_code,
+                                "response_text": response.text[:200],
+                                "json_error": str(json_error),
+                            },
+                        )
+                        return None
+
+                except Exception as e:
+                    last_exception = e
+                    
+                    # Check if we should retry
+                    if not self._should_retry(e, attempt):
+                        break
+                    
+                    # Calculate delay before retry
+                    if attempt < self._max_retries:
+                        delay = self._calculate_retry_delay(attempt)
+                        log_message(
+                            f"{self.name}-platform",
+                            "WARNING",
+                            f"Request failed, retrying in {delay:.1f}s",
+                            {
+                                "platform": self.name,
+                                "endpoint": endpoint,
+                                "attempt": attempt + 1,
+                                "error": str(e),
+                                "error_type": type(e).__name__,
+                                "retry_delay": delay,
+                            },
+                        )
+                        time.sleep(delay)
+                    else:
+                        break
+            
+            # All retries exhausted - log final error
+            if last_exception:
+                log_message(
+                    f"{self.name}-platform",
+                    "ERROR",
+                    f"API request failed after {self._max_retries + 1} attempts",
+                    {
+                        "platform": self.name,
+                        "endpoint": endpoint,
+                        "final_error": str(last_exception),
+                        "error_type": type(last_exception).__name__,
+                    },
+                )
+            
+            return None
 

@@ -157,3 +157,7 @@ config_backup_*.json
 *_backup_*
 migration_*
 security_*
+
+# 数据文件夹（包含用户数据和任务数据）
+data/tasks/
+data/daemons/

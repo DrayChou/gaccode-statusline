@@ -373,7 +373,7 @@ class ClaudeLauncher:
         config_dir.mkdir(parents=True, exist_ok=True)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
-        plugin_config_file = config_dir / "launcher-config.json"
+        plugin_config_file = config_dir / "config.json"
 
         print(
             Colors.colorize("Syncing configuration to plugin directory...", Colors.CYAN)

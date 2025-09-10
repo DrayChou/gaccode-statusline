@@ -18,6 +18,8 @@ platform-config.json
 data/config/platform-config.json
 data/config/launcher-config.json
 data/config/config.json
+bin/data/config/config.json
+bin/data/config/launcher-config.json
 
 # 会话和缓存文件 - 完整缓存目录排除
 session-info-cache.json

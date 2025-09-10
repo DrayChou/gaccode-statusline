@@ -30,7 +30,7 @@ class PlatformManager:
     def __init__(self):
         self.project_dir = Path(__file__).parent
         self.data_dir = self.project_dir / "data"
-        self.config_file = self.data_dir / "config" / "launcher-config.json"
+        self.config_file = self.data_dir / "config" / "config.json"
         self.session_file = self.data_dir / "cache" / "session-mappings.json"
 
         # 确保目录存在

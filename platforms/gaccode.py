@@ -21,6 +21,13 @@ try:
 except ImportError:
     get_cache_manager = None  # 向后兼容
 
+# Import background task integration
+try:
+    from background.platform_integration import enable_background_tasks_for_platform
+    BACKGROUND_TASKS_AVAILABLE = True
+except ImportError:
+    BACKGROUND_TASKS_AVAILABLE = False
+
 
 class GACCodePlatform(BasePlatform):
     """GAC Code platform implementation with 30-minute time-segment caching"""
@@ -40,6 +47,14 @@ class GACCodePlatform(BasePlatform):
         self._min_request_interval = 60.0  # GAC API 要求最少1分钟间隔
 
         self._ensure_cache_directories()
+        
+        # 初始化后台任务集成
+        self._background_enabled = BACKGROUND_TASKS_AVAILABLE
+        if self._background_enabled:
+            try:
+                enable_background_tasks_for_platform(self, data_dir)
+            except Exception:
+                self._background_enabled = False  # 如果集成失败，回退到传统模式
 
     @property
     def name(self) -> str:
@@ -128,7 +143,19 @@ class GACCodePlatform(BasePlatform):
             pass  # 缓存保存失败不影响主流程
 
     def fetch_balance_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch balance data from GAC Code API (5分钟缓存，失败时使用过期缓存)"""
+        """Fetch balance data from GAC Code API (优先使用后台任务数据，降级到传统缓存)"""
+        # 优先尝试后台任务数据（非阻塞，快速）
+        if self._background_enabled and hasattr(self, '_get_background_balance_data'):
+            try:
+                background_data = self._get_background_balance_data()
+                if background_data:
+                    # 添加数据来源标记
+                    background_data["_data_source"] = "background_task"
+                    return background_data
+            except Exception:
+                pass  # 后台任务失败，继续使用传统方式
+        
+        # 后台任务不可用或无数据，使用传统缓存逻辑（但不进行同步refill）
         if get_cache_manager is not None:
             # 使用统一缓存系统
             cache_manager = get_cache_manager()
@@ -136,51 +163,48 @@ class GACCodePlatform(BasePlatform):
             # 尝试从缓存获取数据
             cache_entry = cache_manager.get("balance", "gaccode_balance")
             if cache_entry is not None:
-                # 检查缓存数据中的余额，如果 <= 3 则尝试refill
-                self._check_balance_and_refill_if_needed(cache_entry.data)
+                cache_entry.data["_data_source"] = "unified_cache"
                 return cache_entry.data
 
-            # 缓存未命中，调用API
-            api_data = self.make_request("/credits/balance")
-            if api_data:
-                # 检查余额是否 <= 3，触发refill
-                self._check_balance_and_refill_if_needed(api_data)
-
-                # 保存到缓存（5分钟TTL）
-                cache_manager.set("balance", "gaccode_balance", api_data, 300)
-                return api_data
+            # 缓存未命中，调用API（谨慎，可能导致402）
+            try:
+                api_data = self.make_request("/credits/balance")
+                if api_data:
+                    # 保存到缓存（5分钟TTL）
+                    cache_manager.set("balance", "gaccode_balance", api_data, 300)
+                    api_data["_data_source"] = "direct_api"
+                    return api_data
+            except Exception:
+                pass  # API调用失败，尝试fallback
 
             # API调用失败，尝试获取过期缓存数据
-            # 注意：统一缓存系统会自动清理过期数据，但我们可以手动检查磁盘文件
             fallback_data = self._get_fallback_cache_data()
             if fallback_data:
-                # 检查过期缓存中的余额，如果 <= 3 则尝试refill
-                self._check_balance_and_refill_if_needed(fallback_data)
+                fallback_data["_data_source"] = "expired_cache"
                 return fallback_data
         else:
             # 向后兼容的旧缓存逻辑
             if self._is_cache_valid(self._balance_cache_file, 300):
                 cached_data = self._load_cache_data(self._balance_cache_file)
                 if cached_data:
-                    # 检查缓存数据中的余额，如果 <= 3 则尝试refill
-                    self._check_balance_and_refill_if_needed(cached_data)
+                    cached_data["_data_source"] = "legacy_cache"
                     return cached_data
 
-            # 缓存无效或不存在，调用API
-            api_data = self.make_request("/credits/balance")
-            if api_data:
-                # 检查余额是否 <= 3，触发refill
-                self._check_balance_and_refill_if_needed(api_data)
-
-                # 保存到缓存（5分钟TTL）
-                self._save_cache_data(self._balance_cache_file, api_data, 300)
-                return api_data
+            # 缓存无效或不存在，谨慎调用API
+            try:
+                api_data = self.make_request("/credits/balance")
+                if api_data:
+                    # 保存到缓存（5分钟TTL）
+                    self._save_cache_data(self._balance_cache_file, api_data, 300)
+                    api_data["_data_source"] = "direct_api_legacy"
+                    return api_data
+            except Exception:
+                pass  # API调用失败，尝试过期缓存
 
             # API调用失败，尝试使用过期缓存作为备选方案
             cached_data = self._load_cache_data(self._balance_cache_file)
             if cached_data:
-                # 检查过期缓存中的余额，如果 <= 3 则尝试refill
-                self._check_balance_and_refill_if_needed(cached_data)
+                cached_data["_data_source"] = "expired_legacy_cache"
                 return cached_data
 
         return None
@@ -391,6 +415,8 @@ class GACCodePlatform(BasePlatform):
 
             balance_str = f"GAC.B:{color}{balance}{reset}/{credit_cap}"
 
+            # 移除数据来源指示器（保持余额颜色含义不变）
+
             # 添加倍率指示器
             if multiplier_info["is_active"]:
                 multiplier_value = multiplier_info["value"]
@@ -411,6 +437,8 @@ class GACCodePlatform(BasePlatform):
 
             if next_refill_time != "未知":
                 balance_str += f" ({next_refill_time})"
+                
+            # 后台任务状态将在独立的状态组件中显示
 
             return balance_str
         except Exception:
@@ -1074,3 +1102,66 @@ class GACCodePlatform(BasePlatform):
                 json.dump(refill_record, f, ensure_ascii=False, indent=2)
         except Exception:
             pass  # 缓存更新失败不影响重置操作
+    
+    # 重写基类的后台任务方法
+    def get_background_task_config(self) -> Dict[str, Any]:
+        """GAC Code平台特定的后台任务配置"""
+        base_config = super().get_background_task_config()
+        
+        # 自定义GAC Code的任务配置
+        base_config.update({
+            "balance_check": {
+                "interval": 300,  # 5分钟
+                "enabled": True,
+                "method": "fetch_balance_data"
+            },
+            "refill_check": {
+                "interval": 180,  # 3分钟，更频繁检查
+                "enabled": True,
+                "method": "_check_balance_and_refill_if_needed",
+                "depends_on": "balance_check"
+            },
+            "cache_cleanup": {
+                "interval": 3600,  # 1小时
+                "enabled": True,
+                "method": "_cleanup_expired_cache"
+            },
+            "multiplier_update": {
+                "interval": 600,  # 10分钟，GAC Code特有
+                "enabled": True,
+                "method": "fetch_history_data"
+            }
+        })
+        
+        return base_config
+    
+    def _cleanup_expired_cache(self) -> None:
+        """GAC Code特定的缓存清理"""
+        import glob
+        from pathlib import Path
+        
+        cache_dir = Path(__file__).parent.parent / "data" / "cache"
+        cleaned_count = 0
+        
+        # 清理GAC Code特定的缓存文件
+        gac_cache_patterns = [
+            "gac-*.json",
+            "balance-cache-gaccode.json", 
+            "subscription-cache-gaccode.json"
+        ]
+        
+        for pattern in gac_cache_patterns:
+            for cache_file in cache_dir.glob(pattern):
+                try:
+                    # 检查文件年龄
+                    if cache_file.exists():
+                        file_age = time.time() - cache_file.stat().st_mtime
+                        # 清理超过6小时的缓存
+                        if file_age > 6 * 3600:
+                            cache_file.unlink()
+                            cleaned_count += 1
+                except Exception:
+                    pass
+        
+        if cleaned_count > 0:
+            print(f"GAC Code: Cleaned {cleaned_count} expired cache files")

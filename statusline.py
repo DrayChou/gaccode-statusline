@@ -573,7 +573,7 @@ def load_cache():
 
 def load_platform_config():
     """加载平台配置文件"""
-    platform_config_file = DATA_DIR / "config" / "launcher-config.json"
+    platform_config_file = DATA_DIR / "config" / "config.json"
 
     if not platform_config_file.exists():
         log_message(
@@ -1040,9 +1040,95 @@ def fetch_platform_subscription_data(platform, config):
     return subscription_data
 
 
+def ensure_background_tasks(platform):
+    """确保平台的后台任务正在运行"""
+    try:
+        from background.daemon_manager import DaemonManager
+        from pathlib import Path
+        
+        # 获取data目录
+        data_dir = Path(__file__).parent / "data"
+        daemon_manager = DaemonManager(data_dir)
+        
+        # 检查后台任务是否运行
+        platform_name = platform.name.lower()
+        if not daemon_manager.is_daemon_running(platform_name):
+            log_message(
+                "statusline",
+                "INFO", 
+                f"Auto-starting background tasks for {platform_name}",
+                {"platform": platform_name, "auto_start": True}
+            )
+            
+            # 获取平台配置
+            from config import get_config_manager
+            config_manager = get_config_manager()
+            platform_config = config_manager.get_platform(platform_name)
+            
+            if platform_config and platform_config.get("enabled"):
+                # 准备daemon配置
+                daemon_config = {
+                    "token": platform_config.get("auth_token") or platform_config.get("api_key") or platform_config.get("login_token"),
+                    "platform_config": platform_config,
+                    "api_base": platform.api_base,
+                    "name": platform.name
+                }
+                
+                # 启动daemon
+                success = daemon_manager.start_daemon(platform_name, daemon_config)
+                
+                if success:
+                    log_message(
+                        "statusline",
+                        "INFO",
+                        f"Successfully auto-started background tasks for {platform_name}",
+                        {"platform": platform_name}
+                    )
+                    # 设置平台的后台任务启用标志
+                    platform._background_enabled = True
+                else:
+                    log_message(
+                        "statusline", 
+                        "WARNING",
+                        f"Failed to auto-start background tasks for {platform_name}",
+                        {"platform": platform_name}
+                    )
+            else:
+                log_message(
+                    "statusline",
+                    "DEBUG", 
+                    f"Platform {platform_name} not configured or disabled, skipping auto-start",
+                    {"platform": platform_name}
+                )
+        else:
+            # 后台任务已经在运行，设置标志
+            platform._background_enabled = True
+            
+            # 检查健康状态
+            def check_healthy():
+                try:
+                    status = daemon_manager.get_daemon_status(platform_name)
+                    return status.get("running") == True
+                except:
+                    return False
+            
+            platform._is_background_healthy = check_healthy
+                
+    except Exception as e:
+        log_message(
+            "statusline",
+            "ERROR",
+            f"Error in background task auto-start: {e}",
+            {"platform": getattr(platform, 'name', 'unknown'), "error": str(e)}
+        )
+
+
 def format_platform_data(platform, config, colors):
     """格式化平台相关数据显示"""
     status_parts = []
+    
+    # 自动启动后台任务
+    ensure_background_tasks(platform)
     
     try:
         # 获取余额数据
@@ -1057,6 +1143,19 @@ def format_platform_data(platform, config, colors):
                     if multiplier_info["active"]:
                         multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{colors['reset']}"
                         balance_display += f" {multiplier_mark}"
+                
+                # 添加后台任务状态指示器（所有平台通用）
+                try:
+                    if hasattr(platform, 'format_background_task_status'):
+                        background_status = platform.format_background_task_status()
+                        if background_status:
+                            balance_display += f" {background_status}"
+                except Exception as e:
+                    log_message(
+                        "statusline",
+                        "DEBUG",
+                        f"Failed to get background task status: {e}",
+                    )
                 
                 status_parts.append(balance_display)
             except Exception as e:

@@ -18,7 +18,10 @@ try:
     # Try absolute import first
     from config import get_config_manager
     from data.logger import log_message, log_platform_detection, log_error
-    from data.session_mapping_v2 import get_session_platform, detect_platform_from_session_id
+    from data.session_mapping_v2 import (
+        get_session_platform,
+        detect_platform_from_session_id,
+    )
 except ImportError:
     # Fallback to sys.path manipulation for runtime
     sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -60,9 +63,9 @@ class PlatformManager:
             # 先查询session映射系统（优先使用V2目录式存储）
             try:
                 from data.session_mapping_v2 import get_session_platform
-                
+
                 detected_platform_name = get_session_platform(session_id)
-                
+
                 if detected_platform_name:
                     log_message(
                         "platform-manager",
@@ -74,14 +77,14 @@ class PlatformManager:
                             "mapping_type": "session_mappings_v2",
                         },
                     )
-                    
+
                     # 获取平台配置并创建实例
                     platform_instance = self._create_platform_instance(
                         detected_platform_name, token, config, session_id
                     )
                     if platform_instance:
                         return platform_instance
-                        
+
             except Exception as e:
                 log_message(
                     "platform-manager",
@@ -303,7 +306,7 @@ class PlatformManager:
                         f"Failed to create {platform_class.__name__} instance: {e}",
                     )
                     # 确保在异常情况下也清理资源
-                    if 'temp_instance' in locals():
+                    if "temp_instance" in locals():
                         try:
                             temp_instance.close()
                         except:

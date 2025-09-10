@@ -141,7 +141,7 @@ class DeepSeekPlatform(BasePlatform):
                 "deepseek-platform",
                 "INFO",
                 "No balance data available for display",
-                {"display": "nodata"}
+                {"display": "nodata"},
             )
             return "DeepSeek.B:\033[90mNoData\033[0m"
 
@@ -222,7 +222,7 @@ class DeepSeekPlatform(BasePlatform):
 
             # 格式化显示
             if currency == "CNY":
-                balance_str = f"DeepSeek.B:{color}¥{total_balance:.2f}{reset}"
+                balance_str = f"DeepSeek.B:{color}{total_balance:.2f}CNY{reset}"
             else:
                 balance_str = f"DeepSeek.B:{color}${total_balance:.2f}{reset}"
 
@@ -234,7 +234,7 @@ class DeepSeekPlatform(BasePlatform):
                     curr = info.get("currency", "USD")
                     if balance > 0:
                         if curr == "CNY":
-                            details.append(f"¥{balance:.2f}")
+                            details.append(f"{balance:.2f}CNY")
                         else:
                             details.append(f"${balance:.2f}")
 

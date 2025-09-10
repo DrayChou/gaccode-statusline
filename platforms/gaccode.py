@@ -35,10 +35,10 @@ class GACCodePlatform(BasePlatform):
         self._balance_cache_file = cache_dir / "balance-cache-gaccode.json"
         self._subscription_cache_file = cache_dir / "subscription-cache-gaccode.json"
         self._refill_cache_file = cache_dir / "gac-refill-cache.json"
-        
-        # GAC API 专用频率限制配置 - 防止被封杀  
+
+        # GAC API 专用频率限制配置 - 防止被封杀
         self._min_request_interval = 60.0  # GAC API 要求最少1分钟间隔
-        
+
         self._ensure_cache_directories()
 
     @property
@@ -136,31 +136,42 @@ class GACCodePlatform(BasePlatform):
             # 尝试从缓存获取数据
             cache_entry = cache_manager.get("balance", "gaccode_balance")
             if cache_entry is not None:
+                # 检查缓存数据中的余额，如果 <= 3 则尝试refill
+                self._check_balance_and_refill_if_needed(cache_entry.data)
                 return cache_entry.data
 
             # 缓存未命中，调用API
             api_data = self.make_request("/credits/balance")
             if api_data:
+                # 检查余额是否 <= 3，触发refill
+                self._check_balance_and_refill_if_needed(api_data)
+
                 # 保存到缓存（5分钟TTL）
                 cache_manager.set("balance", "gaccode_balance", api_data, 300)
                 return api_data
 
             # API调用失败，尝试获取过期缓存数据
             # 注意：统一缓存系统会自动清理过期数据，但我们可以手动检查磁盘文件
-            return self._get_fallback_cache_data()
+            fallback_data = self._get_fallback_cache_data()
+            if fallback_data:
+                # 检查过期缓存中的余额，如果 <= 3 则尝试refill
+                self._check_balance_and_refill_if_needed(fallback_data)
+                return fallback_data
         else:
             # 向后兼容的旧缓存逻辑
             if self._is_cache_valid(self._balance_cache_file, 300):
                 cached_data = self._load_cache_data(self._balance_cache_file)
                 if cached_data:
+                    # 检查缓存数据中的余额，如果 <= 3 则尝试refill
+                    self._check_balance_and_refill_if_needed(cached_data)
                     return cached_data
 
             # 缓存无效或不存在，调用API
             api_data = self.make_request("/credits/balance")
             if api_data:
-                # 检查是否需要自动重置积分
-                self._check_and_auto_refill(api_data)
-                
+                # 检查余额是否 <= 3，触发refill
+                self._check_balance_and_refill_if_needed(api_data)
+
                 # 保存到缓存（5分钟TTL）
                 self._save_cache_data(self._balance_cache_file, api_data, 300)
                 return api_data
@@ -168,6 +179,8 @@ class GACCodePlatform(BasePlatform):
             # API调用失败，尝试使用过期缓存作为备选方案
             cached_data = self._load_cache_data(self._balance_cache_file)
             if cached_data:
+                # 检查过期缓存中的余额，如果 <= 3 则尝试refill
+                self._check_balance_and_refill_if_needed(cached_data)
                 return cached_data
 
         return None
@@ -578,7 +591,13 @@ class GACCodePlatform(BasePlatform):
         hour = now.hour
         return (9 <= hour < 12) or (14 <= hour < 18)
 
-    def make_request(self, endpoint: str, method: str = "GET", data: Dict[str, Any] = None, timeout: int = 5) -> Optional[Dict[str, Any]]:
+    def make_request(
+        self,
+        endpoint: str,
+        method: str = "GET",
+        data: Dict[str, Any] = None,
+        timeout: int = 5,
+    ) -> Optional[Dict[str, Any]]:
         """Make API request with support for GET and POST methods"""
         from data.logger import log_message
 
@@ -586,14 +605,14 @@ class GACCodePlatform(BasePlatform):
         if self._session_closed or not self._session:
             log_message(
                 f"{self.name}-platform",
-                "ERROR", 
-                "Cannot make request: session is closed"
+                "ERROR",
+                "Cannot make request: session is closed",
             )
             return None
-        
+
         url = f"{self.api_base}{endpoint}"
         headers = self.get_headers()
-        
+
         log_message(
             f"{self.name}-platform",
             "DEBUG",
@@ -607,14 +626,14 @@ class GACCodePlatform(BasePlatform):
                 "max_retries": self._max_retries,
             },
         )
-        
+
         last_exception = None
-        
+
         for attempt in range(self._max_retries + 1):
             try:
                 # Apply rate limiting
                 self._rate_limit()
-                
+
                 log_message(
                     f"{self.name}-platform",
                     "DEBUG",
@@ -630,20 +649,20 @@ class GACCodePlatform(BasePlatform):
                 # Make HTTP request based on method
                 if method.upper() == "POST":
                     response = self._session.post(
-                        url, 
-                        headers=headers, 
+                        url,
+                        headers=headers,
                         json=data,
                         timeout=timeout,
                         verify=True,
-                        allow_redirects=False
+                        allow_redirects=False,
                     )
                 else:
                     response = self._session.get(
-                        url, 
-                        headers=headers, 
+                        url,
+                        headers=headers,
                         timeout=timeout,
                         verify=True,
-                        allow_redirects=False
+                        allow_redirects=False,
                     )
 
                 log_message(
@@ -695,11 +714,11 @@ class GACCodePlatform(BasePlatform):
 
             except Exception as e:
                 last_exception = e
-                
+
                 # Check if we should retry
                 if not self._should_retry(e, attempt):
                     break
-                
+
                 # Calculate delay before retry
                 if attempt < self._max_retries:
                     delay = self._calculate_retry_delay(attempt)
@@ -720,7 +739,7 @@ class GACCodePlatform(BasePlatform):
                     time.sleep(delay)
                 else:
                     break
-        
+
         # All retries exhausted - log final error
         if last_exception:
             log_message(
@@ -735,7 +754,7 @@ class GACCodePlatform(BasePlatform):
                     "error_type": type(last_exception).__name__,
                 },
             )
-        
+
         return None
 
     def _check_and_auto_refill(self, balance_data: Dict[str, Any]) -> None:
@@ -752,7 +771,7 @@ class GACCodePlatform(BasePlatform):
         # 优先使用API检查今日是否已有重置记录
         if not self._check_today_refill_from_api():
             return True  # API检查显示今日没有重置记录，允许重置
-        
+
         # API显示已有重置记录，禁止重复重置
         return False
 
@@ -764,19 +783,21 @@ class GACCodePlatform(BasePlatform):
             if (current_time - self._last_request_time) < 60.0:  # 1分钟限制
                 # 距离上次请求不足1分钟，使用缓存检查
                 return self._check_today_refill_from_cache()
-            
+
             # 调用工单历史API，获取最近的记录
             tickets_data = self.make_request("/tickets?page=1&limit=10")
             if not tickets_data or "tickets" not in tickets_data:
                 return False  # API失败，默认为没有记录
-            
+
             today = datetime.now().date()
-            
+
             # 检查每个工单是否为今日的积分重置请求
             for ticket in tickets_data["tickets"]:
-                if (ticket.get("categoryId") == 3 and 
-                    ticket.get("title") == "请求重置积分"):
-                    
+                if (
+                    ticket.get("categoryId") == 3
+                    and ticket.get("title") == "请求重置积分"
+                ):
+
                     # 解析创建时间
                     created_at_str = ticket.get("createdAt")
                     if created_at_str:
@@ -785,24 +806,26 @@ class GACCodePlatform(BasePlatform):
                                 created_at_str.replace("Z", "+00:00")
                             )
                             # 转换为北京时间进行比较
-                            beijing_time = created_at.astimezone(timezone(timedelta(hours=8)))
+                            beijing_time = created_at.astimezone(
+                                timezone(timedelta(hours=8))
+                            )
                             ticket_date = beijing_time.date()
-                            
+
                             if ticket_date == today:
                                 return True  # 找到今日的重置记录
                         except Exception:
                             continue  # 时间解析失败，跳过该记录
-            
+
             return False  # 没有找到今日的重置记录
-            
+
         except Exception:
             # API调用失败或频率限制，回退到本地缓存检查
             return self._check_today_refill_from_cache()
-    
+
     def _check_today_refill_from_cache(self) -> bool:
         """从本地缓存检查今日是否已重置（备选方案）"""
         today = datetime.now().date().isoformat()
-        
+
         if self._refill_cache_file.exists():
             try:
                 with open(self._refill_cache_file, "r", encoding="utf-8-sig") as f:
@@ -811,11 +834,191 @@ class GACCodePlatform(BasePlatform):
                 return last_refill_date == today  # 返回是否为今日
             except Exception:
                 return False  # 缓存读取失败，默认为没有记录
-        
+
         return False  # 无缓存记录
 
     def _perform_refill(self) -> bool:
         """执行积分重置操作"""
+        try:
+            # 调用积分重置API
+            refill_data = {
+                "categoryId": 3,
+                "title": "请求重置积分",
+                "description": "",
+                "language": "zh",
+            }
+
+            response = self.make_request("/tickets", method="POST", data=refill_data)
+            if response and response.get("message") == "工单创建成功":
+                # 更新本地缓存记录（备用）
+                self._update_refill_cache()
+                return True
+
+            return False
+        except Exception:
+            return False
+
+    def _check_balance_and_refill_if_needed(self, balance_data: Dict[str, Any]) -> None:
+        """检查余额并在需要时自动重置积分（余额 <= 3 时触发）"""
+        from data.logger import log_message
+        
+        try:
+            balance = balance_data.get("balance", 0)
+            if balance <= 3:
+                log_message(
+                    f"{self.name}-platform",
+                    "WARNING", 
+                    f"Low balance detected ({balance}), checking if refill is needed",
+                    {"balance": balance, "platform": self.name}
+                )
+                
+                # 使用文件锁确保不会重复refill
+                if self._should_auto_refill_with_lock():
+                    log_message(
+                        f"{self.name}-platform",
+                        "INFO", 
+                        "Starting automatic refill process",
+                        {"platform": self.name}
+                    )
+                    self._perform_refill()
+                else:
+                    log_message(
+                        f"{self.name}-platform",
+                        "DEBUG", 
+                        "Refill not needed or already in progress",
+                        {"platform": self.name}
+                    )
+        except Exception as e:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR", 
+                f"Failed to check balance for refill: {e}",
+                {"error": str(e), "platform": self.name}
+            )
+
+    def _should_auto_refill_with_lock(self) -> bool:
+        """使用文件锁判断是否应该进行自动重置"""
+        from data.logger import log_message
+        
+        lock_file = self._refill_cache_file.parent / "gac-refill.lock"
+        
+        try:
+            # 1. 检查是否已有其他进程在进行refill
+            if lock_file.exists():
+                try:
+                    with open(lock_file, "r", encoding="utf-8") as f:
+                        lock_data = json.load(f)
+                    
+                    lock_time = datetime.fromisoformat(lock_data["locked_at"])
+                    current_time = datetime.now()
+                    
+                    # 如果锁超过10分钟，认为是死锁，强制移除
+                    if (current_time - lock_time).total_seconds() > 600:
+                        log_message(
+                            f"{self.name}-platform",
+                            "WARNING", 
+                            "Removing stale refill lock",
+                            {"lock_age_seconds": (current_time - lock_time).total_seconds()}
+                        )
+                        lock_file.unlink(missing_ok=True)
+                    else:
+                        # 锁还在有效期内，跳过refill
+                        log_message(
+                            f"{self.name}-platform",
+                            "DEBUG", 
+                            "Refill lock in place, skipping",
+                            {"lock_age_seconds": (current_time - lock_time).total_seconds()}
+                        )
+                        return False
+                except Exception:
+                    # 锁文件损坏，移除它
+                    lock_file.unlink(missing_ok=True)
+            
+            # 2. 创建锁文件
+            lock_data = {
+                "locked_at": datetime.now().isoformat(),
+                "pid": os.getpid(),
+                "platform": self.name
+            }
+            
+            with open(lock_file, "w", encoding="utf-8") as f:
+                json.dump(lock_data, f, indent=2)
+            
+            # 3. 检查今日是否已重置（优先本地缓存，减少API调用）
+            if self._check_today_refill_from_cache():
+                log_message(
+                    f"{self.name}-platform",
+                    "DEBUG", 
+                    "Already refilled today, removing lock",
+                    {"platform": self.name}
+                )
+                lock_file.unlink(missing_ok=True)
+                return False
+            
+            # 4. 尝试通过API检查（但不会因为API失败而阻塞）
+            try:
+                if self._check_today_refill_from_api():
+                    log_message(
+                        f"{self.name}-platform",
+                        "DEBUG", 
+                        "API shows already refilled today, removing lock",
+                        {"platform": self.name}
+                    )
+                    lock_file.unlink(missing_ok=True)
+                    return False
+            except Exception as e:
+                # API检查失败，继续执行refill（本地缓存已经检查过）
+                log_message(
+                    f"{self.name}-platform",
+                    "DEBUG", 
+                    f"API check failed, proceeding with refill: {e}",
+                    {"platform": self.name}
+                )
+            
+            # 5. 所有检查通过，可以进行refill
+            log_message(
+                f"{self.name}-platform",
+                "INFO", 
+                "Refill checks passed, ready to proceed",
+                {"platform": self.name}
+            )
+            return True
+            
+        except Exception as e:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR", 
+                f"Lock check failed: {e}",
+                {"error": str(e), "platform": self.name}
+            )
+            # 出错时保守处理：不移除锁，但允许refill继续
+            return True
+
+    def _release_refill_lock(self) -> None:
+        """释放refill锁"""
+        from data.logger import log_message
+        
+        lock_file = self._refill_cache_file.parent / "gac-refill.lock"
+        try:
+            lock_file.unlink(missing_ok=True)
+            log_message(
+                f"{self.name}-platform",
+                "DEBUG", 
+                "Refill lock released",
+                {"platform": self.name}
+            )
+        except Exception as e:
+            log_message(
+                f"{self.name}-platform",
+                "WARNING", 
+                f"Failed to release refill lock: {e}",
+                {"error": str(e), "platform": self.name}
+            )
+
+    def _perform_refill(self) -> bool:
+        """执行积分重置操作（带锁保护）"""
+        from data.logger import log_message
+        
         try:
             # 调用积分重置API
             refill_data = {
@@ -829,11 +1032,33 @@ class GACCodePlatform(BasePlatform):
             if response and response.get("message") == "工单创建成功":
                 # 更新本地缓存记录（备用）
                 self._update_refill_cache()
+                log_message(
+                    f"{self.name}-platform",
+                    "INFO", 
+                    "Refill request submitted successfully",
+                    {"platform": self.name}
+                )
                 return True
-            
+            else:
+                log_message(
+                    f"{self.name}-platform",
+                    "ERROR", 
+                    "Refill request failed",
+                    {"response": response, "platform": self.name}
+                )
+                return False
+                
+        except Exception as e:
+            log_message(
+                f"{self.name}-platform",
+                "ERROR", 
+                f"Refill operation failed: {e}",
+                {"error": str(e), "platform": self.name}
+            )
             return False
-        except Exception:
-            return False
+        finally:
+            # 无论成功还是失败，都要释放锁
+            self._release_refill_lock()
 
     def _update_refill_cache(self) -> None:
         """更新重置记录缓存"""

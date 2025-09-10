@@ -31,6 +31,7 @@ sys.path.insert(0, str(script_dir.parent / "data"))
 try:
     from logger import log_message
     from file_lock import safe_json_write, safe_json_read
+
     sys.path.insert(0, str(script_dir.parent))
     from config import get_config_manager
     from session import get_session_manager
@@ -45,26 +46,36 @@ except ImportError as e:
 # 依赖注入接口定义
 class FileSystemProvider(Protocol):
     """文件系统操作接口"""
+
     def read_json(self, path: Path) -> Dict[str, Any]: ...
     def write_json(self, path: Path, data: Dict[str, Any]) -> bool: ...
     def exists(self, path: Path) -> bool: ...
-    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None: ...
+    def mkdir(
+        self, path: Path, parents: bool = True, exist_ok: bool = True
+    ) -> None: ...
 
 
 class ProcessProvider(Protocol):
     """进程执行接口"""
-    def run_subprocess(self, args: List[str], **kwargs) -> subprocess.CompletedProcess: ...
+
+    def run_subprocess(
+        self, args: List[str], **kwargs
+    ) -> subprocess.CompletedProcess: ...
     def popen(self, args: List[str], **kwargs) -> subprocess.Popen: ...
 
 
 class LoggerProvider(Protocol):
     """日志记录接口"""
-    def log(self, level: str, message: str, extra_data: Dict[str, Any] = None) -> None: ...
+
+    def log(
+        self, level: str, message: str, extra_data: Dict[str, Any] = None
+    ) -> None: ...
 
 
 # 默认实现
 class DefaultFileSystemProvider:
     """默认文件系统提供者"""
+
     def read_json(self, path: Path) -> Dict[str, Any]:
         try:
             with open(path, "r", encoding="utf-8-sig") as f:
@@ -72,32 +83,34 @@ class DefaultFileSystemProvider:
         except UnicodeDecodeError:
             with open(path, "r", encoding="utf-8") as f:
                 return json.load(f)
-    
+
     def write_json(self, path: Path, data: Dict[str, Any]) -> bool:
         return safe_json_write(path, data)
-    
+
     def exists(self, path: Path) -> bool:
         return path.exists()
-    
+
     def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None:
         path.mkdir(parents=parents, exist_ok=exist_ok)
 
 
 class DefaultProcessProvider:
     """默认进程提供者"""
+
     def run_subprocess(self, args: List[str], **kwargs) -> subprocess.CompletedProcess:
         return subprocess.run(args, **kwargs)
-    
+
     def popen(self, args: List[str], **kwargs) -> subprocess.Popen:
         return subprocess.Popen(args, **kwargs)
 
 
 class DefaultLoggerProvider:
     """默认日志提供者"""
+
     def __init__(self, script_dir: Path):
         self.script_dir = script_dir
         self.logger_script = script_dir.parent / "data" / "logger.py"
-    
+
     def log(self, level: str, message: str, extra_data: Dict[str, Any] = None) -> None:
         # 屏蔽敏感信息
         safe_message = self._mask_sensitive_data(message)
@@ -115,30 +128,40 @@ class DefaultLoggerProvider:
         }.get(level, Colors.NC)
 
         print(Colors.colorize(safe_message, color))
-    
+
     def _mask_sensitive_data(self, text: str) -> str:
         """屏蔽文本中的敏感信息"""
         import re
+
         patterns = [
             (r"sk-[a-zA-Z0-9\-]{30,100}", lambda m: f"sk-***{m.group()[-4:]}"),
-            (r"Bearer [a-zA-Z0-9+/=]{20,}", lambda m: f"Bearer ***{m.group().split()[-1][-4:]}"),
+            (
+                r"Bearer [a-zA-Z0-9+/=]{20,}",
+                lambda m: f"Bearer ***{m.group().split()[-1][-4:]}",
+            ),
             (r"eyJ[a-zA-Z0-9+/=]{20,}", lambda m: f"jwt-***{m.group()[-4:]}"),
         ]
         result = text
         for pattern, replacement in patterns:
             result = re.sub(pattern, replacement, result)
         return result
-    
+
     def _mask_sensitive_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """屏蔽字典中的敏感信息"""
         if not isinstance(data, dict):
             return data
-        
+
         sensitive_keys = {
-            "api_key", "auth_token", "login_token", "password", "secret",
-            "private_key", "access_token", "refresh_token"
+            "api_key",
+            "auth_token",
+            "login_token",
+            "password",
+            "secret",
+            "private_key",
+            "access_token",
+            "refresh_token",
         }
-        
+
         masked = {}
         for key, value in data.items():
             if any(sensitive in key.lower() for sensitive in sensitive_keys):
@@ -185,11 +208,11 @@ class ClaudeLauncher:
     """Claude Code多平台启动器（支持依赖注入）"""
 
     def __init__(
-        self, 
+        self,
         fs_provider: Optional[FileSystemProvider] = None,
         process_provider: Optional[ProcessProvider] = None,
         logger_provider: Optional[LoggerProvider] = None,
-        script_dir: Optional[Path] = None
+        script_dir: Optional[Path] = None,
     ):
         self.script_dir = script_dir or Path(__file__).parent
         # 使用统一管理器
@@ -204,7 +227,6 @@ class ClaudeLauncher:
     def log(self, level: str, message: str, extra_data: Dict[str, Any] = None):
         """统一日志记录 - 通过注入的logger提供者"""
         self.logger.log(level, message, extra_data)
-
 
     def print_header(self):
         """打印启动器头部信息"""
@@ -280,7 +302,7 @@ class ClaudeLauncher:
 
             # 检查是否有任何形式的认证凭证
             has_credentials = has_api_key or has_login_token or has_auth_token
-            
+
             # GAC Code平台即使没有配置token也默认启用（会使用默认配置）
             if is_enabled and (has_credentials or name == "gaccode"):
                 enabled_platforms[name] = platform_config
@@ -342,7 +364,7 @@ class ClaudeLauncher:
             if gaccode_dir.exists():
                 plugin_path = gaccode_dir
             else:
-                self.log("ERROR", "Cannot find plugin directory")
+                self.log("ERROR", "Cannot find plugin directory", {})
                 sys.exit(1)
 
         # 确保子目录存在
@@ -371,7 +393,11 @@ class ClaudeLauncher:
         if safe_json_write(plugin_config_file, plugin_config):
             print(Colors.colorize("   Plugin configuration synced", Colors.GREEN))
         else:
-            self.log("ERROR", f"Failed to sync configuration to {plugin_config_file}")
+            self.log(
+                "ERROR",
+                f"Failed to sync configuration to {plugin_config_file}",
+                {"file": str(plugin_config_file)},
+            )
             print(Colors.colorize("   Plugin configuration sync failed", Colors.RED))
 
     def setup_environment(self, platform_config: Dict[str, Any]):
@@ -418,11 +444,11 @@ class ClaudeLauncher:
         if platform_config.get("api_key"):
             os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
         elif platform_config.get("auth_token"):
-            # os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]  
+            # os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]
             os.environ["ANTHROPIC_AUTH_TOKEN"] = platform_config["auth_token"]
             # Claude Code 统一使用 API_KEY
         # 注意：login_token 是 GAC Code 独有的用来查询余额的 token，不用于 Claude Code 认证
-            
+
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
         os.environ["ANTHROPIC_MODEL"] = platform_config["model"]
         os.environ["ANTHROPIC_SMALL_FAST_MODEL"] = platform_config["small_model"]
@@ -469,20 +495,24 @@ class ClaudeLauncher:
             print(Colors.colorize("Continue session mode enabled", Colors.CYAN))
 
         try:
-            session = self.session_manager.create_session(selected_platform, continue_session)
-            
+            session = self.session_manager.create_session(
+                selected_platform, continue_session
+            )
+
             # 创建双UUID映射（向后兼容）
             prefixed_uuid = session.prefixed_uuid
             standard_uuid = session.standard_uuid
-            
-            print(Colors.colorize(
-                f"Created dual UUID mapping: {prefixed_uuid} <-> {standard_uuid} -> {selected_platform}",
-                Colors.GRAY
-            ))
-            
+
+            print(
+                Colors.colorize(
+                    f"Created dual UUID mapping: {prefixed_uuid} <-> {standard_uuid} -> {selected_platform}",
+                    Colors.GRAY,
+                )
+            )
+
             return session.session_id
         except Exception as e:
-            self.log("ERROR", f"Session management failed: {e}")
+            self.log("ERROR", f"Session management failed: {e}", {"exception": str(e)})
             # 生成fallback session ID而不是完全失败
             fallback_id = f"fallback-{str(uuid.uuid4())}"
             self.log("WARNING", f"Using fallback session ID: {fallback_id}")
@@ -542,29 +572,16 @@ class ClaudeLauncher:
     def _extract_standard_uuid(self, prefixed_session_id: str) -> str:
         """从2位平台ID前缀的session_id中提取标准UUID"""
         import uuid
-        import hashlib
 
-        parts = prefixed_session_id.split("-")
-        if len(parts) == 5:
-            first_part = parts[0]
+        # 检查是否为带前缀的UUID（36位长度且第3位是'-'）
+        if len(prefixed_session_id) == 36 and prefixed_session_id[2] == "-":
+            # 移除前2位平台前缀，保留剩余部分作为标准UUID
+            standard_uuid = prefixed_session_id[2:]
+            return standard_uuid
 
-            # 检查前2位是否是有效的平台ID (01-ff)
-            if len(first_part) == 8:
-                try:
-                    platform_id = int(first_part[:2], 16)  # 取前2位
-                    if 1 <= platform_id <= 255:  # 有效的2位十六进制范围
-                        # 使用确定性转换，将前2位替换为标准十六进制
-                        remaining_parts = "-".join(parts[1:])
-                        hash_input = (
-                            f"platform_id_{platform_id:02x}:{remaining_parts}".encode(
-                                "utf-8"
-                            )
-                        )
-                        hash_digest = hashlib.md5(hash_input).hexdigest()
-                        standard_uuid = f"{hash_digest[:8]}-{remaining_parts}"
-                        return standard_uuid
-                except ValueError:
-                    pass
+        # 如果已经是标准UUID格式（没有平台前缀），直接返回
+        if len(prefixed_session_id) == 36 and prefixed_session_id[2] != "-":
+            return prefixed_session_id
 
         # 如果转换失败，生成新的标准UUID
         fallback_uuid = str(uuid.uuid4())
@@ -581,29 +598,34 @@ class ClaudeLauncher:
         try:
             # 使用SessionMappingV2系统
             from data.session_mapping_v2 import set_session_platform
-            
+
             metadata = {
                 "prefixed_uuid": prefixed_uuid,
                 "standard_uuid": standard_uuid,
                 "created": datetime.now().isoformat(),
-                "launcher_version": "v2"
+                "launcher_version": "v2",
             }
-            
+
             # 创建双向映射
             success1 = set_session_platform(prefixed_uuid, platform, metadata)
             success2 = set_session_platform(standard_uuid, platform, metadata)
-            
+
             if success1 and success2:
                 self.log(
-                    f"Session mapping V2 created: {prefixed_uuid[:8]}... & {standard_uuid[:8]}... -> {platform}"
+                    "INFO",
+                    f"Session mapping V2 created: {prefixed_uuid[:8]}... & {standard_uuid[:8]}... -> {platform}",
                 )
                 return True
             else:
-                self.log("ERROR", f"SessionMapping V2 failed to create mappings")
+                self.log("ERROR", f"SessionMapping V2 failed to create mappings", {})
                 return False
 
         except Exception as e:
-            self.log("ERROR", f"Failed to create dual session mapping: {e}")
+            self.log(
+                "ERROR",
+                f"Failed to create dual session mapping: {e}",
+                {"exception": str(e)},
+            )
             return False
 
     def launch_claude(
@@ -650,17 +672,21 @@ class ClaudeLauncher:
                 result = subprocess.run(claude_args)
             return result.returncode
         except FileNotFoundError:
-            self.log("ERROR", "Claude Code executable not found")
-            self.log("ERROR", "Please install Claude Code or check PATH")
+            self.log("ERROR", "Claude Code executable not found", {})
+            self.log("ERROR", "Please install Claude Code or check PATH", {})
             return 1
         except subprocess.CalledProcessError as e:
-            self.log("ERROR", f"Claude Code execution failed with exit code: {e.returncode}")
+            self.log(
+                "ERROR",
+                f"Claude Code execution failed with exit code: {e.returncode}",
+                {"exit_code": e.returncode},
+            )
             return e.returncode
         except KeyboardInterrupt:
             self.log("INFO", "Interrupted by user")
             return 130
         except Exception as e:
-            self.log("ERROR", f"Unexpected execution error: {e}")
+            self.log("ERROR", f"Unexpected execution error: {e}", {"exception": str(e)})
             return 1
 
     def run(self, args: List[str]):
@@ -718,14 +744,13 @@ class ClaudeLauncher:
             selected_platform, getattr(parsed_args, "continue")
         )
 
-        # 为了解决UUID映射问题，创建双向映射
-        standard_uuid = self._extract_standard_uuid(session_id)
-        self._create_dual_session_mapping(session_id, standard_uuid, selected_platform)
+        # 创建session映射（session_id已经是正确的带前缀UUID）
+        self._create_dual_session_mapping(session_id, session_id, selected_platform)
 
         # 显示会话信息
         print(Colors.colorize("Session ready", Colors.GREEN))
         print(Colors.colorize(f"   UUID: {session_id}", Colors.GREEN))
-        print(Colors.colorize(f"   Standard UUID: {standard_uuid}", Colors.GRAY))
+        print(Colors.colorize(f"   Standard UUID: {session_id}", Colors.GRAY))
         print(Colors.colorize(f"   Platform: {selected_platform}", Colors.GREEN))
         print(Colors.colorize(f"   Model: {platform_config['model']}", Colors.GREEN))
         if getattr(parsed_args, "continue"):
@@ -739,9 +764,9 @@ class ClaudeLauncher:
         print(Colors.colorize(f"   Session: {session_id}", Colors.GRAY))
         print(Colors.colorize(f"   Model: {platform_config['model']}", Colors.GRAY))
 
-        # 启动Claude Code（传递标准UUID避免重复转换）
+        # 启动Claude Code（传递带前缀的UUID用于平台检测）
         exit_code = self.launch_claude(
-            standard_uuid, getattr(parsed_args, "continue"), parsed_args.remaining_args
+            session_id, getattr(parsed_args, "continue"), parsed_args.remaining_args
         )
 
         # 清理和总结

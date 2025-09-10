@@ -23,19 +23,23 @@ class BasePlatform(ABC):
         self._session.verify = True  # 强制SSL证书验证
         self._session.timeout = (5, 30)  # 连接超时5秒，读取超时30秒
         # 设置安全请求头
-        self._session.headers.update({
-            'User-Agent': 'GAC-Code-StatusLine/2.0',
-            'Accept': 'application/json',
-            'Connection': 'close'  # 防止连接复用泄露
-        })
+        self._session.headers.update(
+            {
+                "User-Agent": "GAC-Code-StatusLine/2.0",
+                "Accept": "application/json",
+                "Connection": "close",  # 防止连接复用泄露
+            }
+        )
         self._session_closed = False
-        
+
         # Rate limiting and retry configuration
         self._last_request_time = 0
-        self._min_request_interval = config.get('rate_limit_interval', 60.0)  # seconds - default 1 minute
-        self._max_retries = config.get('max_retries', 3)
-        self._retry_delay = config.get('retry_delay', 2.0)  # seconds
-        self._backoff_multiplier = config.get('backoff_multiplier', 2.0)
+        self._min_request_interval = config.get(
+            "rate_limit_interval", 60.0
+        )  # seconds - default 1 minute
+        self._max_retries = config.get("max_retries", 3)
+        self._retry_delay = config.get("retry_delay", 2.0)  # seconds
+        self._backoff_multiplier = config.get("backoff_multiplier", 2.0)
 
     def __enter__(self):
         """Context manager entry"""
@@ -51,7 +55,7 @@ class BasePlatform(ABC):
 
     def close(self):
         """Close the HTTP session"""
-        if hasattr(self, '_session') and self._session and not self._session_closed:
+        if hasattr(self, "_session") and self._session and not self._session_closed:
             try:
                 self._session.close()
                 self._session_closed = True
@@ -110,31 +114,31 @@ class BasePlatform(ABC):
             sleep_time = self._min_request_interval - elapsed
             time.sleep(sleep_time)
         self._last_request_time = time.time()
-    
+
     def _should_retry(self, exception: Exception, attempt: int) -> bool:
         """Determine if request should be retried based on exception type and attempt count"""
         if attempt >= self._max_retries:
             return False
-        
+
         # Retry on specific exceptions
         retryable_exceptions = (
             requests.exceptions.Timeout,
             requests.exceptions.ConnectionError,
             requests.exceptions.HTTPError,
         )
-        
+
         if isinstance(exception, requests.exceptions.HTTPError):
             # Retry on specific HTTP status codes
-            if hasattr(exception, 'response') and exception.response:
+            if hasattr(exception, "response") and exception.response:
                 status_code = exception.response.status_code
                 # Retry on rate limiting (429) and server errors (5xx)
                 return status_code == 429 or 500 <= status_code < 600
-        
+
         return isinstance(exception, retryable_exceptions)
-    
+
     def _calculate_retry_delay(self, attempt: int) -> float:
         """Calculate delay before next retry using exponential backoff"""
-        return self._retry_delay * (self._backoff_multiplier ** attempt)
+        return self._retry_delay * (self._backoff_multiplier**attempt)
 
     def make_request(self, endpoint: str, timeout: int = 5) -> Optional[Dict[str, Any]]:
         """Make API request with cross-process locking and rate limiting"""
@@ -145,16 +149,18 @@ class BasePlatform(ABC):
         if self._session_closed or not self._session:
             log_message(
                 f"{self.name}-platform",
-                "ERROR", 
-                "Cannot make request: session is closed"
+                "ERROR",
+                "Cannot make request: session is closed",
             )
             return None
-        
+
         url = f"{self.api_base}{endpoint}"
         headers = self.get_headers()
-        
+
         # Use cross-process API locking
-        with api_request_lock(self.name, endpoint, self._min_request_interval) as can_proceed:
+        with api_request_lock(
+            self.name, endpoint, self._min_request_interval
+        ) as can_proceed:
             if not can_proceed:
                 log_message(
                     f"{self.name}-platform",
@@ -164,11 +170,11 @@ class BasePlatform(ABC):
                         "platform": self.name,
                         "endpoint": endpoint,
                         "min_interval": self._min_request_interval,
-                        "action": "using_cache_fallback"
-                    }
+                        "action": "using_cache_fallback",
+                    },
                 )
                 return None  # 返回None，上层逻辑会使用缓存
-        
+
             log_message(
                 f"{self.name}-platform",
                 "DEBUG",
@@ -181,14 +187,14 @@ class BasePlatform(ABC):
                     "max_retries": self._max_retries,
                 },
             )
-        
+
             last_exception = None
-            
+
             for attempt in range(self._max_retries + 1):
                 try:
                     # Apply rate limiting
                     self._rate_limit()
-                    
+
                     log_message(
                         f"{self.name}-platform",
                         "DEBUG",
@@ -203,11 +209,11 @@ class BasePlatform(ABC):
 
                     # 安全的HTTP请求
                     response = self._session.get(
-                        url, 
-                        headers=headers, 
+                        url,
+                        headers=headers,
                         timeout=timeout,
                         verify=True,  # 强制SSL验证
-                        allow_redirects=False  # 禁止自动重定向防止攻击
+                        allow_redirects=False,  # 禁止自动重定向防止攻击
                     )
 
                     log_message(
@@ -261,11 +267,11 @@ class BasePlatform(ABC):
 
                 except Exception as e:
                     last_exception = e
-                    
+
                     # Check if we should retry
                     if not self._should_retry(e, attempt):
                         break
-                    
+
                     # Calculate delay before retry
                     if attempt < self._max_retries:
                         delay = self._calculate_retry_delay(attempt)
@@ -285,7 +291,7 @@ class BasePlatform(ABC):
                         time.sleep(delay)
                     else:
                         break
-            
+
             # All retries exhausted - log final error
             if last_exception:
                 log_message(
@@ -299,6 +305,5 @@ class BasePlatform(ABC):
                         "error_type": type(last_exception).__name__,
                     },
                 )
-            
-            return None
 
+            return None

@@ -124,7 +124,7 @@ class SiliconFlowPlatform(BasePlatform):
                 "siliconflow-platform",
                 "INFO",
                 "No balance data available for display",
-                {"display": "nodata"}
+                {"display": "nodata"},
             )
             return "SiliconFlow.B:\033[90mNoData\033[0m"
 
@@ -193,15 +193,15 @@ class SiliconFlowPlatform(BasePlatform):
             reset = "\033[0m"
 
             # 格式化显示 - 显示总余额
-            balance_str = f"SiliconFlow.B:{color}¥{total_balance:.2f}{reset}"
+            balance_str = f"SiliconFlow.B:{color}{total_balance:.2f}CNY{reset}"
 
             # 如果有详细信息，显示分解
             if charge_balance > 0 or balance != total_balance:
                 details = []
                 if charge_balance > 0:
-                    details.append(f"M:¥{charge_balance:.2f}")
+                    details.append(f"M:{charge_balance:.2f}")
                 if balance > 0 and balance != charge_balance:
-                    details.append(f"F:¥{balance:.2f}")
+                    details.append(f"F:{balance:.2f}")
 
                 if details:
                     balance_str += f" ({', '.join(details)})"

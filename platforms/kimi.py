@@ -35,8 +35,8 @@ class KimiPlatform(BasePlatform):
             },
         )
 
-        # 平台检测应该通过session-mappings.json进行，这里只作为fallback
-        # 检查token格式作为最后的手段
+        # Platform detection should be done via session-mappings.json, this is fallback only
+        # Check token format as last resort
         if token and token.startswith("sk-"):
             log_message(
                 "kimi-platform",
@@ -67,14 +67,16 @@ class KimiPlatform(BasePlatform):
                     if self.token and len(self.token) > 10
                     else self.token
                 ),
-                "rate_limit_interval": getattr(self, '_min_request_interval', 'not_set'),
-                "last_request_time": getattr(self, '_last_request_time', 'not_set'),
+                "rate_limit_interval": getattr(
+                    self, "_min_request_interval", "not_set"
+                ),
+                "last_request_time": getattr(self, "_last_request_time", "not_set"),
                 "current_time": time.time(),
             },
         )
 
         # Check rate limiting status
-        if hasattr(self, '_last_request_time') and self._last_request_time > 0:
+        if hasattr(self, "_last_request_time") and self._last_request_time > 0:
             elapsed = time.time() - self._last_request_time
             log_message(
                 "kimi-platform",
@@ -82,8 +84,9 @@ class KimiPlatform(BasePlatform):
                 "Rate limiting check",
                 {
                     "elapsed_seconds": elapsed,
-                    "min_interval": getattr(self, '_min_request_interval', 'not_set'),
-                    "can_make_request": elapsed >= getattr(self, '_min_request_interval', 60),
+                    "min_interval": getattr(self, "_min_request_interval", "not_set"),
+                    "can_make_request": elapsed
+                    >= getattr(self, "_min_request_interval", 60),
                 },
             )
 
@@ -120,8 +123,9 @@ class KimiPlatform(BasePlatform):
                     {
                         "endpoint": "/users/me/balance",
                         "possible_cause": "API request failed or returned empty data",
-                        "session_closed": getattr(self, '_session_closed', 'unknown'),
-                        "session_exists": hasattr(self, '_session') and self._session is not None,
+                        "session_closed": getattr(self, "_session_closed", "unknown"),
+                        "session_exists": hasattr(self, "_session")
+                        and self._session is not None,
                     },
                 )
                 return None
@@ -164,20 +168,20 @@ class KimiPlatform(BasePlatform):
 
     def fetch_subscription_data(self) -> Optional[Dict[str, Any]]:
         """Kimi doesn't have subscription endpoint, return None"""
-        # Kimi API 没有订阅信息接口
+        # Kimi API does not have subscription info endpoint
         return None
 
     def format_balance_display(self, balance_data: Dict[str, Any]) -> str:
         """Format Kimi balance for display"""
         from data.logger import log_message
 
-        # 处理空数据情况
+        # Handle empty data case
         if balance_data is None:
             log_message(
                 "kimi-platform",
                 "INFO",
                 "No balance data available for display",
-                {"display": "nodata"}
+                {"display": "nodata"},
             )
             return "KIMI.B:\033[90mNoData\033[0m"
 
@@ -267,26 +271,26 @@ class KimiPlatform(BasePlatform):
                 },
             )
 
-            # 颜色代码基于可用余额
+            # Color codes based on available balance
             if available_balance <= 5:
-                color = "\033[91m"  # 红色
+                color = "\033[91m"  # Red
             elif available_balance <= 20:
-                color = "\033[93m"  # 黄色
+                color = "\033[93m"  # Yellow
             else:
-                color = "\033[92m"  # 绿色
+                color = "\033[92m"  # Green
             reset = "\033[0m"
 
-            # 格式化显示 (使用CNY代替¥符号以避免编码问题)
+            # Format display (use CNY instead of ¥ symbol to avoid encoding issues)
             balance_str = f"KIMI.B:{color}{available_balance:.2f}CNY{reset}"
 
-            # 如果有代金券余额，显示详细信息
+            # Show voucher details if available (use English to avoid encoding issues)
             if voucher_balance > 0:
-                balance_str += f" (券:{voucher_balance:.2f}"
+                balance_str += f" (V:{voucher_balance:.2f}"
                 if cash_balance != 0:
-                    balance_str += f", 现金:{cash_balance:.2f}"
+                    balance_str += f", C:{cash_balance:.2f}"
                 balance_str += ")"
             elif cash_balance != available_balance:
-                balance_str += f" (现金:{cash_balance:.2f})"
+                balance_str += f" (C:{cash_balance:.2f})"
 
             log_message(
                 "kimi-platform",

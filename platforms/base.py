@@ -307,3 +307,82 @@ class BasePlatform(ABC):
                 )
 
             return None
+
+    # 后台任务标准接口
+    def get_background_task_config(self) -> Dict[str, Any]:
+        """
+        获取平台的后台任务配置
+        子类可以重写此方法来自定义任务配置
+        
+        Returns:
+            Dict[str, Any]: 后台任务配置
+        """
+        return {
+            "balance_check": {
+                "interval": 300,  # 5分钟
+                "enabled": True,
+                "method": "fetch_balance_data"
+            },
+            "refill_check": {
+                "interval": 180,  # 3分钟
+                "enabled": hasattr(self, '_perform_refill'),
+                "method": "_check_and_refill_if_needed",
+                "depends_on": "balance_check"
+            },
+            "cache_cleanup": {
+                "interval": 3600,  # 1小时
+                "enabled": True,
+                "method": "_cleanup_expired_cache"
+            }
+        }
+    
+    def get_background_task_dependencies(self) -> Dict[str, Any]:
+        """
+        获取后台任务依赖信息，用于task_executor导入
+        
+        Returns:
+            Dict[str, Any]: 依赖配置信息
+        """
+        return {
+            "token": self.token,
+            "platform_config": self.config,
+            "api_base": self.api_base,
+            "name": self.name
+        }
+    
+    def format_background_task_status(self) -> str:
+        """
+        格式化后台任务状态显示
+        在状态栏中独立显示后台任务状态
+        
+        Returns:
+            str: 格式化的后台任务状态字符串
+        """
+        if not hasattr(self, '_background_enabled') or not self._background_enabled:
+            # 如果后台任务未启用，显示灰色圆点表示传统模式
+            return "\033[90m[BG]\033[0m"
+        
+        # 检查后台任务健康状态
+        if hasattr(self, '_is_background_healthy') and self._is_background_healthy():
+            # 绿色标识表示后台任务正常运行
+            return "\033[92m[BG:OK]\033[0m"
+        else:
+            # 红色标识表示后台任务异常
+            return "\033[91m[BG:ERR]\033[0m"
+    
+    def _cleanup_expired_cache(self) -> None:
+        """
+        清理过期缓存的默认实现
+        子类可以重写此方法来实现特定的缓存清理逻辑
+        """
+        pass  # 默认不执行任何操作
+    
+    def _check_and_refill_if_needed(self, balance_data: Dict[str, Any]) -> None:
+        """
+        检查并执行refill的默认接口
+        子类应该实现自己的refill逻辑
+        
+        Args:
+            balance_data: 余额数据
+        """
+        pass  # 默认不执行任何操作

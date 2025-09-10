@@ -350,55 +350,6 @@ class ClaudeLauncher:
                 )
                 sys.exit(1)
 
-    def sync_configuration(self, config: Dict[str, Any]):
-        """同步配置到插件目录"""
-        plugin_path = Path(config.get("launcher", {}).get("plugin_path", ""))
-        if not plugin_path.is_absolute():
-            plugin_path = self.script_dir / plugin_path
-
-        # 确保插件目录存在
-        if not plugin_path.exists():
-            # 尝试查找gaccode.com目录
-            parent_dir = self.script_dir.parent
-            gaccode_dir = parent_dir / "gaccode.com"
-            if gaccode_dir.exists():
-                plugin_path = gaccode_dir
-            else:
-                self.log("ERROR", "Cannot find plugin directory", {})
-                sys.exit(1)
-
-        # 确保子目录存在
-        config_dir = plugin_path / "data" / "config"
-        cache_dir = plugin_path / "data" / "cache"
-        config_dir.mkdir(parents=True, exist_ok=True)
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        plugin_config_file = config_dir / "config.json"
-
-        print(
-            Colors.colorize("Syncing configuration to plugin directory...", Colors.CYAN)
-        )
-
-        # 创建插件配置文件
-        plugin_config = {
-            "platforms": config["platforms"],
-            "aliases": config.get("aliases", {}),
-            "settings": {
-                "default_platform": config["launcher"].get("default_platform"),
-                "last_updated": datetime.now().isoformat(),
-            },
-        }
-
-        # 使用安全的文件写入（带锁定）
-        if safe_json_write(plugin_config_file, plugin_config):
-            print(Colors.colorize("   Plugin configuration synced", Colors.GREEN))
-        else:
-            self.log(
-                "ERROR",
-                f"Failed to sync configuration to {plugin_config_file}",
-                {"file": str(plugin_config_file)},
-            )
-            print(Colors.colorize("   Plugin configuration sync failed", Colors.RED))
 
     def setup_environment(self, platform_config: Dict[str, Any]):
         """为Claude Code设置环境变量"""
@@ -733,8 +684,7 @@ class ClaudeLauncher:
         )
         print(Colors.colorize(f"   Enabled Platforms: {enabled_count}", Colors.GRAY))
 
-        # 同步配置
-        self.sync_configuration(config)
+        # 配置已由统一配置管理器处理，无需同步
 
         # 设置环境
         self.setup_environment(platform_config)

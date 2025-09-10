@@ -21,6 +21,7 @@ except ImportError:
     # Fallback import for development
     sys.path.insert(0, str(Path(__file__).parent))
     from config import get_config_manager
+
     sys.path.insert(0, str(Path(__file__).parent / "data"))
     from logger import log_message
 
@@ -40,25 +41,28 @@ DATA_DIR = PROJECT_DIR / "data"
 
 # Legacy functions removed - now using unified config manager
 
+
 def show_mode_examples():
     """显示模式使用示例"""
     print("\n=== Mode Examples ===")
     print("\n1. Basic Mode (GAC Code only):")
     print("   python config-statusline.py --mode basic")
-    
+
     print("\n2. Single Platform Mode:")
     print("   python config-statusline.py --mode single:deepseek")
     print("   python config-statusline.py --mode single:kimi")
     print("   python config-statusline.py --mode single:sf")
-    
+
     print("\n3. Multi-Platform Mode:")
     print("   python config-statusline.py --mode multi")
     print("   # Then use launcher scripts:")
     print("   .\\examples\\cc.mp.ps1 dp    # DeepSeek")
     print("   .\\examples\\cc.mp.ps1 kimi  # Kimi")
-    
+
     print("\n4. Test mode detection:")
-    print("   python config-statusline.py --test-mode 02abcdef-1234-5678-9012-123456789abc")
+    print(
+        "   python config-statusline.py --test-mode 02abcdef-1234-5678-9012-123456789abc"
+    )
     print("")
 
 
@@ -66,20 +70,20 @@ def print_current_config():
     """打印当前配置"""
     config_manager = get_config_manager()
     config = config_manager.load_config()
-    
+
     print("\n=== Current GAC Code Configuration ===")
-    
+
     # 显示模式信息
     launcher_settings = config_manager.get_launcher_settings()
     default_platform = launcher_settings.get("default_platform", "gaccode")
-    
+
     print(f"\nMode Configuration:")
     print(f"  Default Platform: {default_platform}")
-    
+
     # 显示有效平台（模拟没有session_id的情况）
     effective_platform = config_manager.get_effective_platform()
     print(f"  Effective Platform (no session): {effective_platform}")
-    
+
     # 显示平台配置状态
     print(f"\nPlatform Status:")
     platforms = config_manager.get_platforms()
@@ -87,26 +91,34 @@ def print_current_config():
         enabled = platform_config.get("enabled", False)
         api_key = config_manager.get_platform_api_key(platform_id)
         has_key = bool(api_key and api_key.strip())
-        
+
         status_icon = "✓" if enabled and has_key else "✗" if enabled else "-"
         key_status = "(key configured)" if has_key else "(no key)"
         enabled_status = "enabled" if enabled else "disabled"
-        
+
         print(f"  {status_icon} {platform_id}: {enabled_status} {key_status}")
-    
+
     # 显示状态条配置
     statusline_config = config_manager.get_statusline_settings()
     print("\nStatusLine Display Options:")
-    for key in ["show_model", "show_directory", "show_git_branch", "show_time", 
-                "show_session_duration", "show_session_cost", "show_balance", 
-                "show_subscription", "show_today_usage"]:
+    for key in [
+        "show_model",
+        "show_directory",
+        "show_git_branch",
+        "show_time",
+        "show_session_duration",
+        "show_session_cost",
+        "show_balance",
+        "show_subscription",
+        "show_today_usage",
+    ]:
         value = statusline_config.get(key, False)
         status = "✓" if value else "✗"
         print(f"  {status} {key}: {value}")
-    
+
     print(f"\nLayout: {statusline_config.get('layout', 'single_line')}")
     print(f"Directory Full Path: {statusline_config.get('directory_full_path', True)}")
-    
+
     # 显示倍率配置
     multiplier_config = config_manager.get_multiplier_config()
     if multiplier_config.get("enabled", True):
@@ -118,11 +130,13 @@ def print_current_config():
             end = period.get("end_time", "")
             multiplier = period.get("multiplier", 1)
             display = period.get("display_text", f"{multiplier}X")
-            weekdays_only = " (weekdays only)" if period.get("weekdays_only", False) else ""
+            weekdays_only = (
+                " (weekdays only)" if period.get("weekdays_only", False) else ""
+            )
             print(f"  - {name}: {start}-{end} = {display}{weekdays_only}")
     else:
         print("\nMultiplier Configuration: Disabled")
-    
+
     print("")
 
 
@@ -238,36 +252,36 @@ def reset_config():
 
 def quick_setup_mode(mode_name):
     """快速设置特定模式
-    
+
     Args:
         mode_name: 'basic', 'single:<platform>', 'multi'
     """
     config_manager = get_config_manager()
-    
-    if mode_name == 'basic':
+
+    if mode_name == "basic":
         # 基础模式 - 重置为GAC Code默认
-        config_manager.set_default_platform('gaccode')
+        config_manager.set_default_platform("gaccode")
         print("✓ Basic Mode configured (GAC Code default)")
-        
-    elif mode_name.startswith('single:'):
+
+    elif mode_name.startswith("single:"):
         # 单平台模式
-        _, platform = mode_name.split(':', 1)
+        _, platform = mode_name.split(":", 1)
         platform = config_manager.resolve_platform_alias(platform)
-        
+
         if config_manager.set_default_platform(platform):
             print(f"✓ Single Platform Mode configured ({platform})")
         else:
             print(f"✗ Failed to configure Single Platform Mode for {platform}")
-            
-    elif mode_name == 'multi':
+
+    elif mode_name == "multi":
         # 多平台模式 - 重置默认平台为gaccode，显示使用说明
-        config_manager.set_default_platform('gaccode')
+        config_manager.set_default_platform("gaccode")
         print("✓ Multi-Platform Mode configured")
         print("Use launcher scripts:")
         print("  .\\examples\\cc.mp.ps1 dp    # DeepSeek")
-        print("  .\\examples\\cc.mp.ps1 kimi  # Kimi") 
+        print("  .\\examples\\cc.mp.ps1 kimi  # Kimi")
         print("  .\\examples\\cc.mp.ps1 sf    # SiliconFlow")
-        
+
     else:
         print(f"Unknown mode: {mode_name}")
         print("Available modes: basic, single:<platform>, multi")

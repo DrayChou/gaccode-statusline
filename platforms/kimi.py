@@ -276,17 +276,17 @@ class KimiPlatform(BasePlatform):
                 color = "\033[92m"  # 绿色
             reset = "\033[0m"
 
-            # 格式化显示
-            balance_str = f"KIMI.B:{color}¥{available_balance:.2f}{reset}"
+            # 格式化显示 (使用CNY代替¥符号以避免编码问题)
+            balance_str = f"KIMI.B:{color}{available_balance:.2f}CNY{reset}"
 
             # 如果有代金券余额，显示详细信息
             if voucher_balance > 0:
-                balance_str += f" (券:¥{voucher_balance:.2f}"
+                balance_str += f" (券:{voucher_balance:.2f}"
                 if cash_balance != 0:
-                    balance_str += f", 现金:¥{cash_balance:.2f}"
+                    balance_str += f", 现金:{cash_balance:.2f}"
                 balance_str += ")"
             elif cash_balance != available_balance:
-                balance_str += f" (现金:¥{cash_balance:.2f})"
+                balance_str += f" (现金:{cash_balance:.2f})"
 
             log_message(
                 "kimi-platform",

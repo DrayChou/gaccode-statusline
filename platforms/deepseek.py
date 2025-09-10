@@ -273,3 +273,25 @@ class DeepSeekPlatform(BasePlatform):
     def format_subscription_display(self, subscription_data: Dict[str, Any]) -> str:
         """DeepSeek doesn't have subscription info"""
         return ""
+
+    def get_background_task_config(self) -> Dict[str, Any]:
+        """
+        获取DeepSeek平台的后台任务配置
+        DeepSeek平台支持余额查询和缓存清理
+        """
+        base_config = super().get_background_task_config()
+        # DeepSeek平台配置 - 没有refill功能
+        deepseek_config = {
+            "balance_check": {
+                "interval": 300,  # 5分钟
+                "enabled": True,
+                "method": "fetch_balance_data"
+            },
+            "cache_cleanup": {
+                "interval": 3600,  # 1小时
+                "enabled": True,
+                "method": "_cleanup_expired_cache"
+            }
+        }
+        base_config.update(deepseek_config)
+        return base_config

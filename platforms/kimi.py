@@ -333,3 +333,25 @@ class KimiPlatform(BasePlatform):
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
+
+    def get_background_task_config(self) -> Dict[str, Any]:
+        """
+        获取Kimi平台的后台任务配置
+        Kimi平台支持余额查询和缓存清理
+        """
+        base_config = super().get_background_task_config()
+        # Kimi平台配置 - 没有refill功能
+        kimi_config = {
+            "balance_check": {
+                "interval": 300,  # 5分钟
+                "enabled": True,
+                "method": "fetch_balance_data"
+            },
+            "cache_cleanup": {
+                "interval": 3600,  # 1小时
+                "enabled": True,
+                "method": "_cleanup_expired_cache"
+            }
+        }
+        base_config.update(kimi_config)
+        return base_config

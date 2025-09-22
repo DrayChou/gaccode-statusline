@@ -1136,14 +1136,14 @@ def format_platform_data(platform, config, colors):
         if balance_data:
             try:
                 balance_display = platform.format_balance_display(balance_data)
-                
+
                 # 如果是GAC Code平台，添加倍数信息
                 if platform.name == "gaccode":
                     multiplier_info = get_multiplier_info(config)
                     if multiplier_info["active"]:
                         multiplier_mark = f"{multiplier_info['color']}[{multiplier_info['display']}]{colors['reset']}"
                         balance_display += f" {multiplier_mark}"
-                
+
                 # 添加后台任务状态指示器（所有平台通用）
                 try:
                     if hasattr(platform, 'format_background_task_status'):
@@ -1156,7 +1156,7 @@ def format_platform_data(platform, config, colors):
                         "DEBUG",
                         f"Failed to get background task status: {e}",
                     )
-                
+
                 status_parts.append(balance_display)
             except Exception as e:
                 log_message(
@@ -1164,6 +1164,14 @@ def format_platform_data(platform, config, colors):
                     "ERROR",
                     f"Failed to format balance display: {e}",
                 )
+                status_parts.append("Balance:Error")
+        else:
+            # 检查是否是配置问题
+            if hasattr(platform, 'has_valid_config') and not platform.has_valid_config():
+                # 没有有效配置，不显示任何信息
+                pass
+            else:
+                # 有配置但获取失败，显示错误
                 status_parts.append("Balance:Error")
         
         # 获取订阅数据

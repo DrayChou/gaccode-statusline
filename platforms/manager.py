@@ -10,6 +10,7 @@ from .gaccode import GACCodePlatform
 from .kimi import KimiPlatform
 from .deepseek import DeepSeekPlatform
 from .siliconflow import SiliconFlowPlatform
+from .glm import GLMPlatform
 import sys
 from pathlib import Path
 
@@ -42,6 +43,7 @@ class PlatformManager:
             KimiPlatform,
             DeepSeekPlatform,
             SiliconFlowPlatform,
+            GLMPlatform,
         ]
 
     def detect_platform(

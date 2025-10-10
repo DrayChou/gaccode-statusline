@@ -371,6 +371,8 @@ class ClaudeLauncher:
             "ANTHROPIC_TIMEOUT_MS",
             "ANTHROPIC_REQUEST_TIMEOUT",
             "ANTHROPIC_MAX_RETRIES",
+            # Claude Code 配置变量 (根据错误信息确认支持的)
+            "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
             # 代理相关变量
             "HTTPS_PROXY",
             "HTTP_PROXY",
@@ -403,6 +405,14 @@ class ClaudeLauncher:
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
         os.environ["ANTHROPIC_MODEL"] = platform_config["model"]
         os.environ["ANTHROPIC_SMALL_FAST_MODEL"] = platform_config["small_model"]
+
+        # 设置Claude Code配置变量（从平台配置中读取，如果有的话）
+        # 根据错误信息，CLAUDE_CODE_MAX_OUTPUT_TOKENS是官方支持的变量
+        claude_code_config = platform_config.get("claude_code_config", {})
+
+        if claude_code_config.get("max_output_tokens"):
+            os.environ["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(claude_code_config["max_output_tokens"])
+            print(Colors.colorize(f"  -> CLAUDE_CODE_MAX_OUTPUT_TOKENS: {claude_code_config['max_output_tokens']}", Colors.GRAY))
 
         # Git Bash路径配置 (Windows)
         # 尝试常见的Git Bash安装路径
@@ -618,11 +628,29 @@ class ClaudeLauncher:
 
         # 执行Claude Code
         try:
+            # 调试：确认环境变量设置
+            max_tokens = os.environ.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS")
+            if max_tokens:
+                print(
+                    Colors.colorize(
+                        f"Debug: CLAUDE_CODE_MAX_OUTPUT_TOKENS={max_tokens} will be passed to Claude Code",
+                        Colors.CYAN,
+                    )
+                )
+            else:
+                print(
+                    Colors.colorize(
+                        "Warning: CLAUDE_CODE_MAX_OUTPUT_TOKENS not found in environment!",
+                        Colors.YELLOW,
+                    )
+                )
+
             # Windows需要shell=True来正确执行.cmd文件和npm命令
             if os.name == "nt":
-                result = subprocess.run(claude_args, shell=True)
+                # 确保环境变量传递给子进程
+                result = subprocess.run(claude_args, shell=True, env=os.environ.copy())
             else:
-                result = subprocess.run(claude_args)
+                result = subprocess.run(claude_args, env=os.environ.copy())
             return result.returncode
         except FileNotFoundError:
             self.log("ERROR", "Claude Code executable not found", {})

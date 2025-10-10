@@ -97,12 +97,19 @@ class GLMPlatform(BasePlatform):
         return None
 
     def fetch_subscription_data(self) -> Optional[Dict[str, Any]]:
-        """Fetch subscription data from GLM API"""
+        """Fetch subscription data from GLM API with persistent cache fallback"""
         # 检查配置
         if not self.has_valid_config():
+            # 即使配置无效，也尝试返回缓存的订阅数据
+            if get_cache_manager is not None:
+                cache_manager = get_cache_manager()
+                cache_entry = cache_manager.get("subscription", "glm_subscription")
+                if cache_entry is not None:
+                    cache_entry.data["_data_source"] = "fallback_cache"
+                    return cache_entry.data
             return None
 
-        # 尝试从缓存获取数据
+        # 尝试从缓存获取数据（仅在缓存未过期时）
         if get_cache_manager is not None:
             cache_manager = get_cache_manager()
             cache_entry = cache_manager.get("subscription", "glm_subscription")
@@ -113,12 +120,29 @@ class GLMPlatform(BasePlatform):
         # 调用API获取最新数据
         api_data = self.make_request("/biz/subscription/list")
         if api_data:
-            # 保存到缓存（1小时TTL）
-            if get_cache_manager is not None:
+            # 检查API响应是否包含有效订阅数据
+            if isinstance(api_data, dict) and api_data.get("data") and api_data.get("success") is not False:
+                # 保存到缓存（1小时TTL）
+                if get_cache_manager is not None:
+                    cache_manager = get_cache_manager()
+                    cache_manager.set("subscription", "glm_subscription", api_data, 3600)
+                api_data["_data_source"] = "direct_api"
+                return api_data
+            # 如果API返回错误，尝试使用缓存的订阅数据
+            elif get_cache_manager is not None:
                 cache_manager = get_cache_manager()
-                cache_manager.set("subscription", "glm_subscription", api_data, 3600)
-            api_data["_data_source"] = "direct_api"
-            return api_data
+                cache_entry = cache_manager.get("subscription", "glm_subscription", ignore_ttl=True)
+                if cache_entry is not None:
+                    cache_entry.data["_data_source"] = "fallback_cache"
+                    return cache_entry.data
+
+        # 最后的备用方案：尝试使用过期的缓存数据
+        if get_cache_manager is not None:
+            cache_manager = get_cache_manager()
+            cache_entry = cache_manager.get("subscription", "glm_subscription", ignore_ttl=True)
+            if cache_entry is not None:
+                cache_entry.data["_data_source"] = "expired_cache"
+                return cache_entry.data
 
         return None
 
@@ -157,7 +181,7 @@ class GLMPlatform(BasePlatform):
         return f"GLM.B:{color}{balance:.6f}{reset}"
 
     def format_subscription_display(self, subscription_data: Dict[str, Any]) -> str:
-        """Format GLM subscription for display"""
+        """Format GLM subscription for display with cache source awareness"""
         try:
             # GLM API 返回的数据结构
             if "data" not in subscription_data or not subscription_data["data"]:
@@ -224,7 +248,22 @@ class GLMPlatform(BasePlatform):
             except:
                 renew_date = next_renew_time
 
-            return f"Sub:{product_name}({renew_date})"
+            # 检查数据源并添加相应标识
+            data_source = subscription_data.get("_data_source", "direct_api")
+
+            # 基础订阅信息显示
+            base_display = f"Sub:{product_name}({renew_date})"
+
+            # 根据数据源添加状态指示
+            if data_source == "expired_cache":
+                return f"{base_display}\033[90m[cache]\033[0m"  # 灰色表示过期缓存
+            elif data_source == "fallback_cache":
+                return f"{base_display}\033[93m[cache]\033[0m"   # 黄色表示API失败后的缓存
+            elif data_source == "unified_cache":
+                return f"{base_display}\033[92m[cache]\033[0m"   # 绿色表示有效缓存
+            else:
+                return base_display  # 直接API数据，无标识
+
         except Exception:
             return "Sub:Error"
 

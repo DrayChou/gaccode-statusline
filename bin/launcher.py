@@ -493,6 +493,8 @@ class ClaudeLauncher:
                     test_cmd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=10,
                     shell=(os.name == "nt"),  # Windows需要shell=True
                 )
@@ -744,3 +746,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

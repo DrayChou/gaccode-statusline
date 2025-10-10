@@ -123,7 +123,7 @@ class CacheManager:
             yield
 
     def get(
-        self, namespace: str, key: str, params: Optional[Dict[str, Any]] = None
+        self, namespace: str, key: str, params: Optional[Dict[str, Any]] = None, ignore_ttl: bool = False
     ) -> Optional[CacheEntry]:
         """获取缓存条目"""
         cache_key = self._generate_cache_key(namespace, key, params)
@@ -132,7 +132,7 @@ class CacheManager:
             # 先检查内存缓存
             if cache_key in self._memory_cache:
                 entry = self._memory_cache[cache_key]
-                if not entry.is_expired:
+                if ignore_ttl or not entry.is_expired:
                     return entry
                 else:
                     # 清理过期的内存缓存
@@ -145,9 +145,10 @@ class CacheManager:
                     cache_data = safe_json_read(cache_file)
                     if cache_data:
                         entry = CacheEntry.from_dict(cache_data)
-                        if not entry.is_expired:
-                            # 将有效数据加载到内存缓存
-                            self._memory_cache[cache_key] = entry
+                        if ignore_ttl or not entry.is_expired:
+                            # 将数据加载到内存缓存（如果忽略TTL或数据有效）
+                            if ignore_ttl or not entry.is_expired:
+                                self._memory_cache[cache_key] = entry
                             return entry
                         else:
                             # 删除过期的磁盘缓存

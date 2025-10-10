@@ -391,7 +391,21 @@ class ConfigManager:
             if platform_config and platform_config.get("enabled") and api_key:
                 return default_platform
 
-        # 优先级4: 默认回退到 GAC Code
+        # 优先级4: 检查第一个有有效API密钥的平台
+        platforms_config = self.get_platforms()
+        for platform_name, platform_config in platforms_config.items():
+            if platform_config and platform_config.get("enabled"):
+                api_key = self.get_platform_api_key(platform_name)
+                if api_key and api_key.strip():
+                    log_message(
+                        "config", "INFO",
+                        f"Using first available platform with API key: {platform_name}",
+                        {"platform": platform_name}
+                    )
+                    return platform_name
+
+        # 优先级5: 最后的兜底到GAC Code（向后兼容）
+        log_message("config", "WARNING", "No configured platform with API key found, falling back to GAC Code")
         return "gaccode"
 
     def migrate_legacy_configs(self) -> bool:

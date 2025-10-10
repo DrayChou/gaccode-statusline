@@ -218,7 +218,17 @@ def cache_session_info(session_data):
                 if not platform:
                     platform = detect_platform_from_session_id(session_id)
                 if not platform:
-                    platform = "gaccode"  # 默认平台
+                    # 使用配置的默认平台，而不是硬编码gaccode
+                    try:
+                        from config import get_config_manager
+                        config_manager = get_config_manager()
+                        platform = config_manager.get_effective_platform()
+                    except Exception as e:
+                        log_message(
+                            "statusline", "WARNING",
+                            f"Failed to get effective platform, using fallback: {e}"
+                        )
+                        platform = "gaccode"  # 最后的兜底
                 
                 # 更新详细session信息
                 success_detailed = update_session_info(session_id, session_data, platform)
@@ -1269,31 +1279,33 @@ def detect_statusline_mode(config, session_info):
             f"Default platform check failed: {e}"
         )
     
-    # 模式3: Basic Mode - 检查GAC Code配置
+    # 模式3: Basic Mode - 检查配置的有效平台
     try:
         from config import get_config_manager
         config_manager = get_config_manager()
-        
-        # 检查是否有任何平台配置了API密钥
-        platforms_config = config_manager.get_platforms()
-        gac_config = platforms_config.get("gaccode", {})
-        gac_api_key = gac_config.get("api_key") or gac_config.get("login_token")
-        
-        if gac_api_key and gac_api_key.strip():
-            log_message(
-                "statusline", "INFO", 
-                "Basic Mode detected - using GAC Code with balance",
-                {"session_id": session_id}
-            )
-            return ("basic", "gaccode", 0.5)
-        else:
-            # 模式4: Zero Configuration Mode - 无任何配置
-            log_message(
-                "statusline", "INFO", 
-                "Zero Configuration Mode detected - no balance display",
-                {"session_id": session_id}
-            )
-            return ("zero_config", "none", 0.3)
+
+        # 使用有效平台检测，而不是固定检查GAC
+        effective_platform = config_manager.get_effective_platform()
+        if effective_platform and effective_platform != "none":
+            platform_config = config_manager.get_platform(effective_platform)
+            if platform_config and platform_config.get("enabled"):
+                # 验证平台有有效的API密钥
+                api_key = config_manager.get_platform_api_key(effective_platform)
+                if api_key and api_key.strip():
+                    log_message(
+                        "statusline", "INFO",
+                        f"Basic Mode detected - using {effective_platform} with balance",
+                        {"session_id": session_id, "platform": effective_platform}
+                    )
+                    return ("basic", effective_platform, 0.5)
+
+        # 模式4: Zero Configuration Mode - 无任何配置
+        log_message(
+            "statusline", "INFO",
+            "Zero Configuration Mode detected - no balance display",
+            {"session_id": session_id}
+        )
+        return ("zero_config", "none", 0.3)
             
     except Exception as e:
         log_message(

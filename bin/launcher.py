@@ -350,7 +350,6 @@ class ClaudeLauncher:
                 )
                 sys.exit(1)
 
-
     def setup_environment(self, platform_config: Dict[str, Any]):
         """为Claude Code设置环境变量"""
         print(Colors.colorize("\nSetting up Claude Code environment...", Colors.CYAN))
@@ -392,14 +391,18 @@ class ClaudeLauncher:
                 print(Colors.colorize(f"  -> Clearing: {var_name}", Colors.GRAY))
                 del os.environ[var_name]
 
-        # 为Claude Code设置新环境变量
-        # 根据平台配置设置正确的认证变量
+        # 为 Claude Code 设置新环境变量
+        # 根据平台配置设置正确的认证变量，确保 api_key 和 auth_token 互斥
         if platform_config.get("api_key"):
+            # 设置 API Key 时，清理可能存在的 AUTH TOKEN（仅当 auth_token 为空时才清理）
             os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
+            if "ANTHROPIC_AUTH_TOKEN" in os.environ:
+                del os.environ["ANTHROPIC_AUTH_TOKEN"]
         elif platform_config.get("auth_token"):
-            # os.environ["ANTHROPIC_API_KEY"] = platform_config["auth_token"]
+            # 设置 Auth Token 时，清理可能存在的 API KEY（仅当 api_key 为空时才清理）
             os.environ["ANTHROPIC_AUTH_TOKEN"] = platform_config["auth_token"]
-            # Claude Code 统一使用 API_KEY
+            if "ANTHROPIC_API_KEY" in os.environ:
+                del os.environ["ANTHROPIC_API_KEY"]
         # 注意：login_token 是 GAC Code 独有的用来查询余额的 token，不用于 Claude Code 认证
 
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
@@ -411,8 +414,15 @@ class ClaudeLauncher:
         claude_code_config = platform_config.get("claude_code_config", {})
 
         if claude_code_config.get("max_output_tokens"):
-            os.environ["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(claude_code_config["max_output_tokens"])
-            print(Colors.colorize(f"  -> CLAUDE_CODE_MAX_OUTPUT_TOKENS: {claude_code_config['max_output_tokens']}", Colors.GRAY))
+            os.environ["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(
+                claude_code_config["max_output_tokens"]
+            )
+            print(
+                Colors.colorize(
+                    f"  -> CLAUDE_CODE_MAX_OUTPUT_TOKENS: {claude_code_config['max_output_tokens']}",
+                    Colors.GRAY,
+                )
+            )
 
         # Git Bash路径配置 (Windows)
         # 尝试常见的Git Bash安装路径
@@ -592,7 +602,11 @@ class ClaudeLauncher:
             return False
 
     def launch_claude(
-        self, session_id: str, continue_session: bool, remaining_args: List[str]
+        self,
+        session_id: str,
+        continue_session: bool,
+        remaining_args: List[str],
+        platform_config: Dict[str, Any],
     ):
         """启动Claude Code - 智能检测启动方式"""
         print(Colors.colorize("\nLaunching Claude Code...", Colors.MAGENTA))
@@ -611,6 +625,43 @@ class ClaudeLauncher:
 
         # 准备参数
         claude_args = claude_base_cmd.copy()
+
+        # 确定使用哪个 settings 文件
+        if platform_config and platform_config.get("settings_file"):
+            # 验证自定义路径的安全性
+            if self._validate_path(
+                platform_config.get("settings_file", ""), "settings_file"
+            ):
+                custom_settings_path = Path(
+                    platform_config["settings_file"]
+                ).expanduser()
+        else:
+            custom_settings_path = Path.home() / ".claude" / "settings.gaccode.json"
+
+        default_settings_path = Path.home() / ".claude" / "settings.json"
+
+        if custom_settings_path.exists():
+            claude_args.append(f"--settings={custom_settings_path}")
+            print(
+                Colors.colorize(
+                    f"📄 Using custom settings: {custom_settings_path.name}",
+                    Colors.CYAN,
+                )
+            )
+        elif default_settings_path.exists():
+            claude_args.append(f"--settings={default_settings_path}")
+            print(
+                Colors.colorize(
+                    f"📄 Using default settings: {default_settings_path.name}",
+                    Colors.CYAN,
+                )
+            )
+        else:
+            print(
+                Colors.colorize(
+                    "⚠️  No settings file found, using defaults", Colors.YELLOW
+                )
+            )
 
         # 如果是继续会话模式，传递 --continue；否则传递 --session-id
         if continue_session:
@@ -744,9 +795,12 @@ class ClaudeLauncher:
         print(Colors.colorize(f"   Session: {session_id}", Colors.GRAY))
         print(Colors.colorize(f"   Model: {platform_config['model']}", Colors.GRAY))
 
-        # 启动Claude Code（传递带前缀的UUID用于平台检测）
+        # 启动 Claude Code（传递带前缀的 UUID 用于平台检测）
         exit_code = self.launch_claude(
-            session_id, getattr(parsed_args, "continue"), parsed_args.remaining_args
+            session_id,
+            getattr(parsed_args, "continue"),
+            parsed_args.remaining_args,
+            platform_config,
         )
 
         # 清理和总结
@@ -774,5 +828,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

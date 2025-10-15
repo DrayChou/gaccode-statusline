@@ -5,11 +5,12 @@ Multi-Platform Claude Code Launcher
 统一的Python启动器 - 支持所有平台和操作系统
 
 用法:
-    python launcher.py [platform] [--continue] [additional-args...]
+    python launcher.py [platform] [--continue|-c] [additional-args...]
 
 示例:
     python launcher.py dp              # 启动DeepSeek
     python launcher.py kimi --continue # 继续Kimi会话
+    python launcher.py kimi -c         # 继续Kimi会话（简短形式）
     python launcher.py gc              # 启动GAC Code
 """
 
@@ -20,8 +21,9 @@ import shutil
 import subprocess
 import argparse
 import uuid
+import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Protocol
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 
 # Add data directory to path for imports
@@ -30,7 +32,6 @@ sys.path.insert(0, str(script_dir.parent / "data"))
 
 try:
     from logger import log_message
-    from file_lock import safe_json_write, safe_json_read
 
     sys.path.insert(0, str(script_dir.parent))
     from config import get_config_manager
@@ -43,81 +44,22 @@ except ImportError as e:
     sys.exit(1)
 
 
-# 依赖注入接口定义
-class FileSystemProvider(Protocol):
-    """文件系统操作接口"""
+class SimpleLogger:
+    """简化的日志提供者"""
 
-    def read_json(self, path: Path) -> Dict[str, Any]: ...
-    def write_json(self, path: Path, data: Dict[str, Any]) -> bool: ...
-    def exists(self, path: Path) -> bool: ...
-    def mkdir(
-        self, path: Path, parents: bool = True, exist_ok: bool = True
-    ) -> None: ...
-
-
-class ProcessProvider(Protocol):
-    """进程执行接口"""
-
-    def run_subprocess(
-        self, args: List[str], **kwargs
-    ) -> subprocess.CompletedProcess: ...
-    def popen(self, args: List[str], **kwargs) -> subprocess.Popen: ...
-
-
-class LoggerProvider(Protocol):
-    """日志记录接口"""
-
-    def log(
-        self, level: str, message: str, extra_data: Dict[str, Any] = None
-    ) -> None: ...
-
-
-# 默认实现
-class DefaultFileSystemProvider:
-    """默认文件系统提供者"""
-
-    def read_json(self, path: Path) -> Dict[str, Any]:
-        try:
-            with open(path, "r", encoding="utf-8-sig") as f:
-                return json.load(f)
-        except UnicodeDecodeError:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-    def write_json(self, path: Path, data: Dict[str, Any]) -> bool:
-        return safe_json_write(path, data)
-
-    def exists(self, path: Path) -> bool:
-        return path.exists()
-
-    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None:
-        path.mkdir(parents=parents, exist_ok=exist_ok)
-
-
-class DefaultProcessProvider:
-    """默认进程提供者"""
-
-    def run_subprocess(self, args: List[str], **kwargs) -> subprocess.CompletedProcess:
-        return subprocess.run(args, **kwargs)
-
-    def popen(self, args: List[str], **kwargs) -> subprocess.Popen:
-        return subprocess.Popen(args, **kwargs)
-
-
-class DefaultLoggerProvider:
-    """默认日志提供者"""
-
-    def __init__(self, script_dir: Path):
-        self.script_dir = script_dir
-        self.logger_script = script_dir.parent / "data" / "logger.py"
+    def __init__(self):
+        pass
 
     def log(self, level: str, message: str, extra_data: Dict[str, Any] = None) -> None:
         # 屏蔽敏感信息
         safe_message = self._mask_sensitive_data(message)
         safe_extra_data = self._mask_sensitive_dict(extra_data or {})
 
-        # 使用Python日志系统
-        log_message("launcher", level, safe_message, safe_extra_data)
+        # 使用统一日志系统
+        try:
+            log_message("launcher", level, safe_message, safe_extra_data)
+        except:
+            pass  # 如果日志系统不可用，继续执行
 
         # 同时输出到控制台
         color = {
@@ -131,14 +73,9 @@ class DefaultLoggerProvider:
 
     def _mask_sensitive_data(self, text: str) -> str:
         """屏蔽文本中的敏感信息"""
-        import re
-
         patterns = [
             (r"sk-[a-zA-Z0-9\-]{30,100}", lambda m: f"sk-***{m.group()[-4:]}"),
-            (
-                r"Bearer [a-zA-Z0-9+/=]{20,}",
-                lambda m: f"Bearer ***{m.group().split()[-1][-4:]}",
-            ),
+            (r"Bearer [a-zA-Z0-9+/=]{20,}", lambda m: f"Bearer ***{m.group().split()[-1][-4:]}"),
             (r"eyJ[a-zA-Z0-9+/=]{20,}", lambda m: f"jwt-***{m.group()[-4:]}"),
         ]
         result = text
@@ -207,22 +144,14 @@ class Colors:
 class ClaudeLauncher:
     """Claude Code多平台启动器（支持依赖注入）"""
 
-    def __init__(
-        self,
-        fs_provider: Optional[FileSystemProvider] = None,
-        process_provider: Optional[ProcessProvider] = None,
-        logger_provider: Optional[LoggerProvider] = None,
-        script_dir: Optional[Path] = None,
-    ):
-        self.script_dir = script_dir or Path(__file__).parent
+    def __init__(self):
+        self.script_dir = Path(__file__).parent
         # 使用统一管理器
         self.config_manager = get_config_manager()
         self.session_manager = get_session_manager()
 
-        # 注入依赖或使用默认实现
-        self.fs = fs_provider or DefaultFileSystemProvider()
-        self.process = process_provider or DefaultProcessProvider()
-        self.logger = logger_provider or DefaultLoggerProvider(self.script_dir)
+        # 使用简化的日志提供者
+        self.logger = SimpleLogger()
 
     def log(self, level: str, message: str, extra_data: Dict[str, Any] = None):
         """统一日志记录 - 通过注入的logger提供者"""
@@ -234,48 +163,7 @@ class ClaudeLauncher:
         print(Colors.colorize("=" * 40, Colors.GRAY))
         print()
 
-    def _validate_path(self, path_str: str, description: str) -> Optional[Path]:
-        """验证路径安全性，防止路径遍历攻击"""
-        if not path_str:
-            return None
-
-        try:
-            path = Path(path_str).resolve()
-
-            # 检查路径是否包含危险的遍历模式
-            if ".." in str(path) or path_str.startswith("/") and "../" in path_str:
-                self.log(
-                    "WARNING",
-                    f"Potentially unsafe path detected in {description}: {path_str}",
-                )
-                return None
-
-            # 确保路径在合理范围内（用户目录或程序目录下）
-            allowed_prefixes = [
-                Path.home(),
-                Path.cwd(),
-                self.script_dir.parent,  # Project root
-                Path("C:/"),  # Windows drives
-                Path("/"),  # Unix root (for cross-platform)
-            ]
-
-            if not any(
-                str(path).startswith(str(prefix)) for prefix in allowed_prefixes
-            ):
-                self.log(
-                    "WARNING",
-                    f"Path outside allowed directories in {description}: {path}",
-                )
-                return None
-
-            return path
-
-        except (OSError, ValueError) as e:
-            self.log(
-                "WARNING", f"Invalid path in {description}: {path_str}, error: {e}"
-            )
-            return None
-
+  
     def load_config(self) -> Dict[str, Any]:
         """加载配置文件 - 使用统一配置管理器"""
         config = self.config_manager.load_config()
@@ -350,9 +238,12 @@ class ClaudeLauncher:
                 )
                 sys.exit(1)
 
+  
     def setup_environment(self, platform_config: Dict[str, Any]):
         """为Claude Code设置环境变量"""
         print(Colors.colorize("\nSetting up Claude Code environment...", Colors.CYAN))
+
+        # 注意：不再依赖settings文件，直接清理和设置环境变量
 
         # 清理环境变量
         variables_to_clear = [
@@ -370,6 +261,10 @@ class ClaudeLauncher:
             "ANTHROPIC_TIMEOUT_MS",
             "ANTHROPIC_REQUEST_TIMEOUT",
             "ANTHROPIC_MAX_RETRIES",
+            # Claude Code 默认模型环境变量
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+            "ANTHROPIC_DEFAULT_OPUS_MODEL",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL",
             # Claude Code 配置变量 (根据错误信息确认支持的)
             "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
             # 代理相关变量
@@ -393,16 +288,28 @@ class ClaudeLauncher:
 
         # 为 Claude Code 设置新环境变量
         # 根据平台配置设置正确的认证变量，确保 api_key 和 auth_token 互斥
+
+        # 调试：显示当前环境变量状态
+        print(Colors.colorize(f"  -> Debug: ANTHROPIC_AUTH_TOKEN = {'[SET]' if os.environ.get('ANTHROPIC_AUTH_TOKEN') else '[NOT SET]'}", Colors.CYAN))
+        print(Colors.colorize(f"  -> Debug: ANTHROPIC_API_KEY = {'[SET]' if os.environ.get('ANTHROPIC_API_KEY') else '[NOT SET]'}", Colors.CYAN))
+
         if platform_config.get("api_key"):
-            # 设置 API Key 时，清理可能存在的 AUTH TOKEN（仅当 auth_token 为空时才清理）
+            # 设置 API Key 时，强制清理 AUTH TOKEN
             os.environ["ANTHROPIC_API_KEY"] = platform_config["api_key"]
-            if "ANTHROPIC_AUTH_TOKEN" in os.environ:
-                del os.environ["ANTHROPIC_AUTH_TOKEN"]
+            print(Colors.colorize(f"  -> Setting: ANTHROPIC_API_KEY = sk-***{platform_config['api_key'][-4:]}", Colors.GREEN))
+
+            # 强制覆盖为空字符串，确保没有冲突
+            os.environ["ANTHROPIC_AUTH_TOKEN"] = ""
+            print(Colors.colorize(f"  -> Force clearing: ANTHROPIC_AUTH_TOKEN = [EMPTY]", Colors.YELLOW))
+
         elif platform_config.get("auth_token"):
-            # 设置 Auth Token 时，清理可能存在的 API KEY（仅当 api_key 为空时才清理）
+            # 设置 Auth Token 时，强制清理 API KEY
             os.environ["ANTHROPIC_AUTH_TOKEN"] = platform_config["auth_token"]
-            if "ANTHROPIC_API_KEY" in os.environ:
-                del os.environ["ANTHROPIC_API_KEY"]
+            print(Colors.colorize(f"  -> Setting: ANTHROPIC_AUTH_TOKEN = ***{platform_config['auth_token'][-4:]}", Colors.GREEN))
+
+            # 强制覆盖为空字符串，确保没有冲突
+            os.environ["ANTHROPIC_API_KEY"] = ""
+            print(Colors.colorize(f"  -> Force clearing: ANTHROPIC_API_KEY = [EMPTY]", Colors.YELLOW))
         # 注意：login_token 是 GAC Code 独有的用来查询余额的 token，不用于 Claude Code 认证
 
         os.environ["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
@@ -424,26 +331,39 @@ class ClaudeLauncher:
                 )
             )
 
-        # Git Bash路径配置 (Windows)
-        # 尝试常见的Git Bash安装路径
-        possible_git_bash_paths = [
-            Path.home()
-            / "scoop"
-            / "apps"
-            / "git"
-            / "current"
-            / "bin"
-            / "bash.exe",  # Scoop
-            Path("C:/Program Files/Git/bin/bash.exe"),  # Git for Windows 默认路径
-            Path("C:/Program Files (x86)/Git/bin/bash.exe"),  # Git for Windows x86
-            Path.home()
-            / "AppData"
-            / "Local"
-            / "Programs"
-            / "Git"
-            / "bin"
-            / "bash.exe",  # 用户安装
+        # Git Bash路径配置 (Windows) - 使用动态检测
+        possible_git_bash_paths = []
+
+        # 1. 检查环境变量指向的Git安装
+        git_env_vars = [
+            ("GIT_INSTALL_PATH", "Git/bin/bash.exe"),
+            ("PROGRAMFILES", "Git/bin/bash.exe"),
+            ("PROGRAMFILES(X86)", "Git/bin/bash.exe"),
+            ("LOCALAPPDATA", "Programs/Git/bin/bash.exe"),
         ]
+
+        for env_var, relative_path in git_env_vars:
+            if env_var in os.environ:
+                git_path = Path(os.environ[env_var]) / relative_path
+                if git_path.exists():
+                    possible_git_bash_paths.append(git_path)
+
+        # 2. Scoop安装路径 (用户目录下)
+        scoop_git = Path.home() / "scoop" / "apps" / "git" / "current" / "bin" / "bash.exe"
+        if scoop_git.exists():
+            possible_git_bash_paths.append(scoop_git)
+
+        # 3. 常见安装位置 (作为fallback，但先检查是否存在)
+        common_fallbacks = [
+            Path("C:/Program Files/Git/bin/bash.exe"),
+            Path("C:/Program Files (x86)/Git/bin/bash.exe"),
+        ]
+        possible_git_bash_paths.extend([p for p in common_fallbacks if p.exists()])
+
+        # 4. 用户自定义安装路径
+        user_install = Path.home() / "AppData" / "Local" / "Programs" / "Git" / "bin" / "bash.exe"
+        if user_install.exists():
+            possible_git_bash_paths.append(user_install)
 
         for git_bash_path in possible_git_bash_paths:
             if git_bash_path.exists():
@@ -456,7 +376,19 @@ class ClaudeLauncher:
                 )
                 break
 
-        print(Colors.colorize("Claude Code environment configured", Colors.GREEN))
+        # 验证环境变量设置，确保没有冲突
+        auth_conflict = False
+        if "ANTHROPIC_API_KEY" in os.environ and "ANTHROPIC_AUTH_TOKEN" in os.environ:
+            # 检查是否都非空
+            api_key_val = os.environ.get("ANTHROPIC_API_KEY", "")
+            auth_token_val = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+            if api_key_val and auth_token_val:  # 都非空才算冲突
+                auth_conflict = True
+                print(Colors.colorize("  [WARNING] Both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set!", Colors.RED))
+                print(Colors.colorize("     This may cause authentication conflicts with Claude Code.", Colors.RED))
+
+        if not auth_conflict:
+            print(Colors.colorize("Claude Code environment configured", Colors.GREEN))
 
     def manage_session(self, selected_platform: str, continue_session: bool) -> str:
         """管理会话"""
@@ -626,42 +558,14 @@ class ClaudeLauncher:
         # 准备参数
         claude_args = claude_base_cmd.copy()
 
-        # 确定使用哪个 settings 文件
-        if platform_config and platform_config.get("settings_file"):
-            # 验证自定义路径的安全性
-            if self._validate_path(
-                platform_config.get("settings_file", ""), "settings_file"
-            ):
-                custom_settings_path = Path(
-                    platform_config["settings_file"]
-                ).expanduser()
-        else:
-            custom_settings_path = Path.home() / ".claude" / "settings.gaccode.json"
-
-        default_settings_path = Path.home() / ".claude" / "settings.json"
-
-        if custom_settings_path.exists():
-            claude_args.append(f"--settings={custom_settings_path}")
-            print(
-                Colors.colorize(
-                    f"📄 Using custom settings: {custom_settings_path.name}",
-                    Colors.CYAN,
-                )
+        # 注意：--settings参数经测试无效，无法覆盖系统环境变量
+        # 我们完全依赖环境变量清理和PowerShell隔离来实现配置
+        print(
+            Colors.colorize(
+                "Using environment variable isolation (no settings file dependency)",
+                Colors.CYAN,
             )
-        elif default_settings_path.exists():
-            claude_args.append(f"--settings={default_settings_path}")
-            print(
-                Colors.colorize(
-                    f"📄 Using default settings: {default_settings_path.name}",
-                    Colors.CYAN,
-                )
-            )
-        else:
-            print(
-                Colors.colorize(
-                    "⚠️  No settings file found, using defaults", Colors.YELLOW
-                )
-            )
+        )
 
         # 如果是继续会话模式，传递 --continue；否则传递 --session-id
         if continue_session:
@@ -696,12 +600,50 @@ class ClaudeLauncher:
                     )
                 )
 
-            # Windows需要shell=True来正确执行.cmd文件和npm命令
-            if os.name == "nt":
-                # 确保环境变量传递给子进程
-                result = subprocess.run(claude_args, shell=True, env=os.environ.copy())
-            else:
-                result = subprocess.run(claude_args, env=os.environ.copy())
+            # 使用智能环境变量设置方法
+            clean_env = self._setup_subprocess_env(platform_config)
+
+            # 显示环境变量设置信息
+            if platform_config.get("api_key"):
+                print(Colors.colorize(f"  -> Subprocess env override: ANTHROPIC_API_KEY=sk-***{platform_config['api_key'][-4:]}", Colors.GREEN))
+                print(Colors.colorize(f"  -> Subprocess env override: ANTHROPIC_AUTH_TOKEN=[EMPTY]", Colors.YELLOW))
+            elif platform_config.get("auth_token"):
+                print(Colors.colorize(f"  -> Subprocess env override: ANTHROPIC_AUTH_TOKEN=***{platform_config['auth_token'][-4:]}", Colors.GREEN))
+                print(Colors.colorize(f"  -> Subprocess env override: ANTHROPIC_API_KEY=[EMPTY]", Colors.YELLOW))
+            print(Colors.colorize(f"  -> Subprocess env override: ANTHROPIC_BASE_URL={platform_config['api_base_url']}", Colors.CYAN))
+
+            # 调试：显示关键环境变量
+            print(Colors.colorize(f"  -> Debug: PATH exists: {'PATH' in clean_env}", Colors.CYAN))
+            if 'PATH' in clean_env:
+                print(Colors.colorize(f"  -> Debug: PATH length: {len(clean_env['PATH'])}", Colors.CYAN))
+
+            # 测试命令是否真的存在
+            cmd_path = shutil.which(claude_args[0])
+            print(Colors.colorize(f"  -> Debug: which('{claude_args[0]}') = {cmd_path}", Colors.CYAN))
+
+            # 如果找到了完整路径，使用完整路径
+            if cmd_path:
+                print(Colors.colorize(f"  -> Using full path: {cmd_path}", Colors.GREEN))
+                claude_args[0] = cmd_path
+
+            # 验证环境变量是否真的被设置
+            print(Colors.colorize(f"  -> Final verification in subprocess env:", Colors.CYAN))
+            print(Colors.colorize(f"     ANTHROPIC_API_KEY = {'[SET]' if clean_env.get('ANTHROPIC_API_KEY') else '[NOT SET]'}", Colors.CYAN))
+            print(Colors.colorize(f"     ANTHROPIC_AUTH_TOKEN = {'[SET]' if clean_env.get('ANTHROPIC_AUTH_TOKEN') else '[NOT SET]'}", Colors.CYAN))
+            print(Colors.colorize(f"     ANTHROPIC_BASE_URL = {clean_env.get('ANTHROPIC_BASE_URL', '[NOT SET]')}", Colors.CYAN))
+
+            # 关键修复：临时修改settings.json文件
+            print(Colors.colorize(f"  -> Temporarily modifying settings.json to clear env conflicts", Colors.YELLOW))
+            backup_settings_path = self._modify_settings_json_temporarily(platform_config)
+
+            try:
+                result = subprocess.run(claude_args, env=clean_env, shell=(os.name == "nt"))
+            finally:
+                # 恢复原始settings.json
+                if backup_settings_path and backup_settings_path.exists():
+                    print(Colors.colorize(f"  -> Restoring original settings.json", Colors.GRAY))
+                    self._restore_settings_json(backup_settings_path)
+                    print(Colors.colorize(f"  -> Settings.json restored", Colors.GREEN))
             return result.returncode
         except FileNotFoundError:
             self.log("ERROR", "Claude Code executable not found", {})
@@ -733,7 +675,7 @@ class ClaudeLauncher:
             "platform", nargs="?", help="Platform name or alias (dp, kimi, gc, sf, lp)"
         )
         parser.add_argument(
-            "--continue", action="store_true", help="Continue existing session"
+            "-c", "--continue", action="store_true", help="Continue existing session"
         )
         parser.add_argument(
             "remaining_args", nargs="*", help="Additional arguments for Claude Code"
@@ -817,6 +759,110 @@ class ClaudeLauncher:
         print(Colors.colorize(f"   UUID: {session_id}", Colors.GRAY))
 
         return exit_code
+
+    def _create_settings_env_config(self, platform_config: Dict[str, Any]) -> Dict[str, str]:
+        """Create environment configuration for settings.json"""
+        env_config = {}
+
+        # 设置认证信息
+        if platform_config.get("api_key"):
+            env_config.update({
+                "ANTHROPIC_API_KEY": platform_config["api_key"],
+                "ANTHROPIC_AUTH_TOKEN": ""
+            })
+        elif platform_config.get("auth_token"):
+            env_config.update({
+                "ANTHROPIC_AUTH_TOKEN": platform_config["auth_token"],
+                "ANTHROPIC_API_KEY": ""
+            })
+
+        # 设置API基础URL
+        if platform_config.get("api_base_url"):
+            env_config["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
+
+        # 设置模型配置 - 重要的新增功能
+        model = platform_config.get("model", "")
+        if model:
+            # 设置通用模型配置
+            env_config["ANTHROPIC_MODEL"] = model
+            env_config["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model
+            env_config["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+            env_config["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
+            env_config["ANTHROPIC_SMALL_FAST_MODEL"] = platform_config.get("small_model", model)
+
+        return env_config
+
+    def _setup_subprocess_env(self, platform_config: Dict[str, Any]) -> Dict[str, str]:
+        """Setup subprocess environment variables"""
+        clean_env = os.environ.copy()
+
+        # 设置认证信息
+        if platform_config.get("api_key"):
+            clean_env["ANTHROPIC_API_KEY"] = platform_config["api_key"]
+            clean_env["ANTHROPIC_AUTH_TOKEN"] = ""
+        elif platform_config.get("auth_token"):
+            clean_env["ANTHROPIC_AUTH_TOKEN"] = platform_config["auth_token"]
+            clean_env["ANTHROPIC_API_KEY"] = ""
+
+        # 设置API基础URL
+        if platform_config.get("api_base_url"):
+            clean_env["ANTHROPIC_BASE_URL"] = platform_config["api_base_url"]
+
+        # 设置模型配置 - 确保所有模型环境变量都被正确设置
+        model = platform_config.get("model", "")
+        if model:
+            clean_env["ANTHROPIC_MODEL"] = model
+            clean_env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = model
+            clean_env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = model
+            clean_env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = model
+            clean_env["ANTHROPIC_SMALL_FAST_MODEL"] = platform_config.get("small_model", model)
+
+        # 设置Claude Code配置变量
+        claude_code_config = platform_config.get("claude_code_config", {})
+        if claude_code_config.get("max_output_tokens"):
+            clean_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = str(claude_code_config["max_output_tokens"])
+
+        return clean_env
+
+    def _modify_settings_json_temporarily(self, platform_config: Dict[str, Any]) -> Optional[Path]:
+        """Temporarily modify settings.json and return backup path"""
+        user_settings_path = Path.home() / ".claude" / "settings.json"
+        backup_settings_path = Path.home() / ".claude" / "settings.json.backup"
+
+        if not user_settings_path.exists():
+            return None
+
+        try:
+            # 备份原始settings.json
+            shutil.copy2(user_settings_path, backup_settings_path)
+            print(Colors.colorize(f"  -> Backed up settings.json to settings.json.backup", Colors.GRAY))
+
+            # 读取并修改settings.json
+            with open(user_settings_path, "r", encoding="utf-8") as f:
+                settings_data = json.load(f)
+
+            # 保存原始env配置用于调试
+            original_env = settings_data.get("env", {})
+            print(Colors.colorize(f"  -> Original env in settings.json: {list(original_env.keys())}", Colors.CYAN))
+
+            # 设置正确的环境变量配置
+            settings_data["env"] = self._create_settings_env_config(platform_config)
+
+            # 写入修改后的settings.json
+            with open(user_settings_path, "w", encoding="utf-8") as f:
+                json.dump(settings_data, f, indent=2, ensure_ascii=False)
+
+            print(Colors.colorize(f"  -> Updated env configuration in settings.json", Colors.GREEN))
+            return backup_settings_path
+        except Exception as e:
+            print(Colors.colorize(f"  -> Warning: Failed to modify settings.json: {e}", Colors.RED))
+            return None
+
+    def _restore_settings_json(self, backup_settings_path: Optional[Path]):
+        """Restore original settings.json from backup"""
+        if backup_settings_path and backup_settings_path.exists():
+            user_settings_path = Path.home() / ".claude" / "settings.json"
+            shutil.move(backup_settings_path, user_settings_path)
 
 
 def main():

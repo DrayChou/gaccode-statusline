@@ -15,34 +15,88 @@
       "name": "Kimi",
       "api_base_url": "https://api.moonshot.cn/anthropic",
       "auth_token": "",
-      "model": "kimi-k2-0905-preview",
-      "small_model": "kimi-k2-0905-preview",
+      "model": "kimi-k2-turbo-preview",
+      "small_model": "kimi-k2-turbo-preview",
       "enabled": true
     },
     "deepseek": {
       "name": "DeepSeek",
       "api_base_url": "https://api.deepseek.com/anthropic",
-      "api_key": "",
-      "model": "deepseek-v3",
-      "small_model": "deepseek-v3",
-      "enabled": true
+      "auth_token": "",
+      "model": "deepseek-chat",
+      "small_model": "deepseek-chat",
+      "enabled": true,
+      "claude_code_config": {
+        "max_output_tokens": 64000
+      }
     },
     "siliconflow": {
       "name": "SiliconFlow",
-      "api_base_url": "https://api.siliconflow.cn/anthropic",
+      "api_base_url": "https://api.siliconflow.cn/",
       "api_key": "",
-      "model": "claude-3-5-sonnet-20241022",
-      "small_model": "claude-3-5-haiku-20241022",
+      "model": "deepseek-ai/DeepSeek-V3",
+      "small_model": "deepseek-ai/DeepSeek-V3",
+      "enabled": true,
+      "claude_code_config": {
+        "max_output_tokens": 64000
+      }
+    },
+    "glm": {
+      "name": "GLM",
+      "api_base_url": "https://open.bigmodel.cn/api/anthropic",
+      "auth_token": "",
+      "model": "glm-4.6",
+      "small_model": "glm-4.6",
       "enabled": true
     },
-    "local_proxy": {
-      "name": "Local Proxy",
-      "api_base_url": "http://localhost:8000/anthropic",
+    "qwen3-coder": {
+      "name": "Qwen3-Coder",
+      "api_base_url": "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
+      "auth_token": "",
+      "model": "qwen3-coder-plus",
+      "small_model": "qwen3-coder-plus",
+      "enabled": true
+    },
+    "local-kimi": {
+      "name": "Local-kimi",
+      "api_base_url": "http://localhost:7601",
       "api_key": "",
-      "model": "claude-3-5-sonnet-20241022",
-      "small_model": "claude-3-5-haiku-20241022",
-      "enabled": false
+      "model": "tag:kimi",
+      "small_model": "tag:kimi",
+      "enabled": true
+    },
+    "local-dp": {
+      "name": "Local-dp",
+      "api_base_url": "http://localhost:7601",
+      "api_key": "",
+      "model": "tag:deepseek",
+      "small_model": "tag:deepseek",
+      "enabled": true
+    },
+    "local-glm": {
+      "name": "Local-glm",
+      "api_base_url": "http://localhost:7601",
+      "api_key": "",
+      "model": "tag:glm",
+      "small_model": "tag:glm",
+      "enabled": true
     }
+  },
+  "aliases": {
+    "gc": "gaccode",
+    "ga": "gaccode",
+    "dp": "deepseek",
+    "ds": "deepseek",
+    "sc": "siliconflow",
+    "sf": "siliconflow",
+    "km": "kimi",
+    "kimi": "kimi",
+    "glm": "glm",
+    "qw3": "qwen3-coder",
+    "lkimi": "local-kimi",
+    "lkm": "local-kimi",
+    "ldp": "local-dp",
+    "lglm": "local-glm"
   },
   "launcher": {
     "default_platform": "gaccode",

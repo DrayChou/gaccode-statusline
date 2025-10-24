@@ -47,62 +47,10 @@ class ConfigManager:
         return {
             "version": "2.0",
             "last_updated": datetime.now().isoformat(),
-            # 平台配置 (来自 launcher-config.json)
-            "platforms": {
-                "gaccode": {
-                    "name": "GAC Code",
-                    "api_base_url": "https://relay05.gaccode.com/claudecode",
-                    "api_key": "",
-                    "login_token": "",
-                    "model": "",
-                    "small_model": "",
-                    "enabled": True,
-                },
-                "kimi": {
-                    "name": "Kimi",
-                    "api_base_url": "https://api.moonshot.cn/anthropic",
-                    "auth_token": "",
-                    "model": "kimi-k2-0905-preview",
-                    "small_model": "kimi-k2-0905-preview",
-                    "enabled": True,
-                },
-                "deepseek": {
-                    "name": "DeepSeek",
-                    "api_base_url": "https://api.deepseek.com/anthropic",
-                    "api_key": "",
-                    "model": "deepseek-chat",
-                    "small_model": "deepseek-chat",
-                    "enabled": True,
-                },
-                "siliconflow": {
-                    "name": "SiliconFlow",
-                    "api_base_url": "https://api.siliconflow.cn/",
-                    "api_key": "",
-                    "model": "deepseek-ai/DeepSeek-V3.1",
-                    "small_model": "deepseek-ai/DeepSeek-V3.1",
-                    "enabled": True,
-                },
-                "local_proxy": {
-                    "name": "Local Proxy",
-                    "api_base_url": "http://localhost:7601",
-                    "api_key": "local-key",
-                    "model": "deepseek-v3.1",
-                    "small_model": "deepseek-v3.1",
-                    "enabled": True,
-                    "proxy_for": "deepseek",
-                },
-            },
-            # 平台别名 (来自 launcher-config.json)
-            "aliases": {
-                "gc": "gaccode",
-                "dp": "deepseek",
-                "ds": "deepseek",
-                "sc": "siliconflow",
-                "sf": "siliconflow",
-                "lp": "local_proxy",
-                "kimi": "kimi",
-                "local": "local_proxy",
-            },
+            # 平台配置 - 将从外部配置文件同步，此处仅作为空结构
+            "platforms": {},
+            # 平台别名 - 将从外部配置文件同步，此处仅作为空结构
+            "aliases": {},
             # 启动器设置 (来自 launcher-config.json)
             "launcher": {
                 "default_platform": "gaccode",  # Single Platform Mode 使用的默认平台
@@ -188,6 +136,15 @@ class ConfigManager:
             else:
                 log_message("config", "INFO", "Creating default configuration")
                 config = self._get_default_config()
+
+            # 自动同步外部平台配置
+            try:
+                self.sync_external_platforms_config_to_config(config)
+            except Exception as e:
+                log_message("config", "WARNING", f"Failed to sync external config: {e}")
+
+            # 保存配置（如果第一次创建）
+            if not self.unified_config_file.exists():
                 self.save_config(config)
 
             self._config_cache = config
@@ -408,30 +365,83 @@ class ConfigManager:
         log_message("config", "WARNING", "No configured platform with API key found, falling back to GAC Code")
         return "gaccode"
 
+    def sync_external_platforms_config_to_config(self, config: Dict[str, Any]) -> bool:
+        """将外部平台配置同步到指定配置对象（不保存）"""
+        try:
+            updated = False
+
+            # 定义外部配置文件搜索路径（按优先级）
+            external_config_paths = [
+                # 1. 用户主目录配置（最高优先级）
+                Path.home() / ".claude" / "config" / "platforms.json",
+                # 2. 项目根目录的配置
+                self.project_dir / "platforms.json",
+                # 3. 数据目录中的配置
+                self.config_dir / "platforms.json",
+                # 4. 向后兼容的旧配置位置
+                self.config_dir / "launcher-config.json",
+            ]
+
+            for config_path in external_config_paths:
+                if config_path.exists():
+                    log_message("config", "INFO", f"Syncing platforms config from: {config_path}")
+                    external_config = safe_json_read(config_path)
+
+                    if external_config:
+                        # 合并平台配置
+                        if "platforms" in external_config:
+                            config["platforms"].update(external_config["platforms"])
+                            log_message("config", "DEBUG", f"Synced {len(external_config['platforms'])} platforms")
+                            updated = True
+
+                        # 合并别名配置
+                        if "aliases" in external_config:
+                            config["aliases"].update(external_config["aliases"])
+                            log_message("config", "DEBUG", f"Synced {len(external_config['aliases'])} aliases")
+                            updated = True
+
+                        # 设置默认平台
+                        if "default_platform" in external_config:
+                            config["launcher"]["default_platform"] = external_config["default_platform"]
+                            log_message("config", "DEBUG", f"Set default platform: {external_config['default_platform']}")
+                            updated = True
+
+                        break  # 找到第一个有效配置文件就停止
+
+            if updated:
+                log_message("config", "INFO", "External platforms configuration synced to memory")
+
+            return updated
+
+        except Exception as e:
+            log_message("config", "ERROR", f"Failed to sync external platforms config: {e}")
+            return False
+
+    def sync_external_platforms_config(self) -> bool:
+        """从外部配置文件同步平台配置"""
+        try:
+            config = self.load_config()
+            updated = self.sync_external_platforms_config_to_config(config)
+
+            if updated:
+                self.save_config(config)
+                log_message("config", "INFO", "External platforms configuration synced and saved")
+
+            return updated
+
+        except Exception as e:
+            log_message("config", "ERROR", f"Failed to sync external platforms config: {e}")
+            return False
+
     def migrate_legacy_configs(self) -> bool:
         """迁移旧版配置文件"""
         try:
             config = self.load_config()
             migrated = False
 
-            # 迁移 launcher-config.json
-            launcher_config_file = self.config_dir / "launcher-config.json"
-            if launcher_config_file.exists():
-                log_message("config", "INFO", "Migrating launcher-config.json")
-                legacy_config = safe_json_read(launcher_config_file)
-                if legacy_config:
-                    # 合并平台配置
-                    if "platforms" in legacy_config:
-                        config["platforms"].update(legacy_config["platforms"])
-                    # 合并别名
-                    if "aliases" in legacy_config:
-                        config["aliases"].update(legacy_config["aliases"])
-                    # 合并设置
-                    if "settings" in legacy_config:
-                        launcher_settings = config.setdefault("launcher", {})
-                        launcher_settings.update(legacy_config["settings"])
-
-                    migrated = True
+            # 首先尝试同步外部平台配置
+            if self.sync_external_platforms_config():
+                migrated = True
 
             # 迁移 statusline-config.json
             statusline_config_file = self.config_dir / "statusline-config.json"
@@ -457,18 +467,6 @@ class ConfigManager:
         except Exception as e:
             log_message("config", "ERROR", f"Configuration migration failed: {e}")
             return False
-
-
-# 全局配置管理器实例
-_config_manager: Optional[ConfigManager] = None
-
-
-def get_config_manager() -> ConfigManager:
-    """获取全局配置管理器实例"""
-    global _config_manager
-    if _config_manager is None:
-        _config_manager = ConfigManager()
-    return _config_manager
 
     def _sanitize_config_for_storage(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """清理配置中的敏感信息，防止明文存储"""
@@ -509,6 +507,18 @@ def get_config_manager() -> ConfigManager:
 
         # 通用验证：至少20个字符，包含字母数字
         return len(key) >= 20 and any(c.isalnum() for c in key)
+
+
+# 全局配置管理器实例
+_config_manager: Optional[ConfigManager] = None
+
+
+def get_config_manager() -> ConfigManager:
+    """获取全局配置管理器实例"""
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
 
 
 # 本模块采用配置驱动架构，不提供命令行接口

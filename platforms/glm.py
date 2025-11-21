@@ -150,21 +150,21 @@ class GLMPlatform(BasePlatform):
         """Format GLM balance for display"""
         # 检查API返回的错误
         if balance_data.get("code") == 401:
-            return f"GLM.B:\033[91m401\033[0m"
+            return f"\033[91m401\033[0m"
         elif balance_data.get("success") == False:
             code = balance_data.get("code", "ERROR")
-            return f"GLM.B:\033[91m{code}\033[0m"
+            return f"\033[91m{code}\033[0m"
 
         # 检查是否有错误信息
         if "error" in balance_data:
             error_info = balance_data["error"]
             error_msg = error_info.get("message", "Unknown Error")
             error_code = error_info.get("code", "ERROR")
-            return f"GLM.B:\033[91m{error_code}\033[0m"
+            return f"\033[91m{error_code}\033[0m"
 
         # GLM API 返回的数据结构
         if "data" not in balance_data:
-            return f"GLM.B:\033[91mDATA_ERROR\033[0m"
+            return f"\033[91mDATA_ERROR\033[0m"
 
         data = balance_data["data"]
         balance = data.get("availableBalance", 0)
@@ -178,7 +178,7 @@ class GLMPlatform(BasePlatform):
             color = "\033[92m"  # 绿色
         reset = "\033[0m"
 
-        return f"GLM.B:{color}{balance:.6f}{reset}"
+        return f"{color}{balance:.6f}{reset}"
 
     def format_subscription_display(self, subscription_data: Dict[str, Any]) -> str:
         """Format GLM subscription for display with cache source awareness"""
